@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import { User, Car, Calendar, CreditCard } from 'lucide-react';
 
+interface FormState {
+  nom: string;
+  prenom: string;
+  email: string;
+  carModel: string;
+  startDate: string;
+}
+
 const AddClientForm: React.FC<{ slotId?: number }> = ({ slotId = 23 }) => {
   
-    const [formData, setFormData] = useState<FormState>({
+    const [formData, _setFormData] = useState<FormState>({
     nom: '',
     prenom: '',
     email: '',
