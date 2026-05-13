@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Car, Mail, Plus, Trash2, Save, MapPin, Calendar, Receipt, Download, CreditCard } from 'lucide-react';
-import axios from 'axios';
+import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
 
 const calculateProrata = (startDate: string): number => {
@@ -12,16 +12,14 @@ const calculateProrata = (startDate: string): number => {
   return parseFloat(((basePrice / daysInMonth) * remainingDays).toFixed(2));
 };
 
+const formatDateFR = (dateString: string) => new Date(dateString).toLocaleDateString('fr-FR');
+
 const UserDashboard = () => {
   const [user, setUser] = useState<any>({ nom: '', prenom: '', email: '', cars: [] });
   const [mySlots, setMySlots] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
-
-  const API_URL = 'http://localhost:3000';
-  const token = localStorage.getItem('token');
-  const config = { headers: { Authorization: `Bearer ${token}` } };
 
   useEffect(() => {
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
@@ -34,7 +32,7 @@ const UserDashboard = () => {
 
   const fetchMySlots = async (email: string) => {
     try {
-      const response = await axios.get(`${API_URL}/parking`, config);
+      const response = await api.get('/parking');
       const foundSlots = response.data.filter((s: any) => s.email === email);
       setMySlots(foundSlots);
     } catch (e) { console.error(e); }
@@ -42,7 +40,7 @@ const UserDashboard = () => {
 
   const fetchInvoices = async () => {
     try {
-      const response = await axios.get(`${API_URL}/invoices/my`, config);
+      const response = await api.get('/invoices/my');
       setInvoices(response.data);
     } catch (e) { console.error(e); }
   };
@@ -56,16 +54,17 @@ const UserDashboard = () => {
     setUser({ ...user, cars: newCars });
   };
 
-  const handleUpdate = async () => {
+  const handleSaveProfile = async () => {
     setIsSaving(true);
     try {
-      const res = await axios.patch(`${API_URL}/auth/profile`, user, config);
-      localStorage.setItem('user', JSON.stringify(res.data));
-      setMessage('Profil mis à jour avec succès');
+      await api.patch('/auth/profile', { cars: user.cars });
+      localStorage.setItem('user', JSON.stringify(user));
+      setMessage('Modifications enregistrées');
       setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      alert("Erreur de sauvegarde");
-    } finally { setIsSaving(false); }
+    } catch (error) {
+      setMessage('Erreur lors de la sauvegarde');
+    }
+    setIsSaving(false);
   };
 
   const handleDownloadInvoice = (invoice: any) => {

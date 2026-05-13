@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download } from 'lucide-react';
-import axios from 'axios';
+import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
 
 const AdminDashboard = () => {
@@ -15,16 +15,13 @@ const AdminDashboard = () => {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'parking' | 'invoices'>('parking');
 
-  const API_URL = 'http://localhost:3000';
-  const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
-
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
       const [parkingRes, usersRes] = await Promise.all([
-        axios.get(`${API_URL}/parking`, config),
-        axios.get(`${API_URL}/auth/users`, config)
+        api.get('/parking'),
+        api.get('/auth/users')
       ]);
       setSlots(parkingRes.data);
       setUsers(usersRes.data);
@@ -44,15 +41,14 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      await axios.patch(`${API_URL}/parking/${selectedSlot.number}`, {
+      await api.patch(`/parking/${selectedSlot.number}`, {
         status: 'occupé',
         nom: selectedUser.nom,
         prenom: selectedUser.prenom,
-        email: selectedUser.email,
+        userId: selectedUser._id,
         carModel: selectedCar.model,
-        licensePlate: selectedCar.plate,
-        startDate: new Date().toISOString().split('T')[0]
-      }, config);
+        licensePlate: selectedCar.plate
+      });
       resetSelection();
       fetchData();
     } catch (err) { alert("Erreur d'attribution"); }
@@ -66,9 +62,9 @@ const AdminDashboard = () => {
 
   const fetchInvoices = async () => {
     try {
-      const res = await axios.get(`${API_URL}/invoices`, config);
+      const res = await api.get('/invoices');
       setInvoices(res.data);
-    } catch (e) { console.error(e); }
+    } catch (error) { console.error('Erreur factures', error); }
   };
 
   // Calcul des statistiques
@@ -101,7 +97,14 @@ const AdminDashboard = () => {
               </div>
               <p className="text-neutral-500 text-xs">Cette action révoquera l'accès du véhicule actuellement stationné.</p>
               <button onClick={async () => {
-                await axios.patch(`${API_URL}/parking/${showConfirmModal}`, { status: 'disponible', nom: '', prenom: '', email: '', carModel: '', licensePlate: '', startDate: null }, config);
+                await api.patch(`/parking/${showConfirmModal}`, {
+                    status: 'disponible',
+                    nom: null,
+                    prenom: null,
+                    userId: null,
+                    carModel: null,
+                    licensePlate: null
+                });
                 setShowConfirmModal(null); fetchData();
               }} className="w-full bg-rose-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-rose-600 transition-all shadow-lg shadow-rose-900/30">
                 Confirmer la libération

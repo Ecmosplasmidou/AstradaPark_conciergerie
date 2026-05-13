@@ -1,8 +1,10 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // Utilise l'URL de prod si elle est définie dans Vercel, sinon localhost en développement
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  // Utilise automatiquement le backend Render en production, et localhost en développement
+  baseURL: import.meta.env.PROD 
+    ? 'https://astradapark-conciergerie.onrender.com'
+    : 'http://localhost:3000',
 });
 
 api.interceptors.request.use((config) => {
