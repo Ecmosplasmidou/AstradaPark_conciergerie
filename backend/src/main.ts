@@ -5,11 +5,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: true, // Allow all origins for the deployed frontend (can restrict to Vercel URL later)
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
 
-  await app.listen(3000);
+  const port = process.env.PORT || 3000;
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();
