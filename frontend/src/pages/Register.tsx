@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Car, Plus, Trash2, Crown } from 'lucide-react';
-import axios from 'axios';
+import { Car, Plus, Trash2, Crown, CheckCircle2, AlertCircle } from 'lucide-react';
+import api from '../services/api';
 
 const Register = () => {
   const [formData, setFormData] = useState({
     nom: '', prenom: '', email: '', password: ''
   });
   const [cars, setCars] = useState([{ model: '', plate: '' }]);
+  const [popup, setPopup] = useState<{show: boolean, type: 'success'|'error', message: string}>({ show: false, type: 'success', message: '' });
   const navigate = useNavigate();
 
   const handleAddCar = () => setCars([...cars, { model: '', plate: '' }]);
@@ -25,16 +26,31 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:3000/auth/signup', { ...formData, cars });
-      alert('Bienvenue chez KELVAL SARL — votre compte a été créé.');
-      navigate('/login');
-    } catch (error) {
-      alert("Erreur lors de l'inscription");
+      await api.post('/auth/signup', { ...formData, cars });
+      setPopup({ show: true, type: 'success', message: 'Bienvenue chez KELVAL SARL — votre compte a été créé.' });
+      setTimeout(() => navigate('/login'), 2500);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || "Erreur lors de l'inscription. Veuillez vérifier vos informations.";
+      setPopup({ show: true, type: 'error', message: errorMsg });
+      setTimeout(() => setPopup(p => ({...p, show: false})), 4000);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #0A0A0A 0%, #1A1A2E 50%, #0F0F0F 100%)' }}>
+      
+      {/* POPUP STYLÉE */}
+      {popup.show && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] animate-fade-in-up">
+          <div className={`px-5 sm:px-6 py-3 sm:py-4 rounded-2xl shadow-2xl border flex items-center gap-3 backdrop-blur-xl ${
+            popup.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+          }`}>
+            {popup.type === 'success' ? <CheckCircle2 size={20} className="shrink-0" /> : <AlertCircle size={20} className="shrink-0" />}
+            <p className="font-bold text-xs sm:text-sm">{popup.message}</p>
+          </div>
+        </div>
+      )}
+
       {/* Decorative ambient */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] sm:w-[800px] h-[500px] sm:h-[800px] rounded-full opacity-[0.025]" style={{ background: 'radial-gradient(circle, #D4A853 0%, transparent 70%)' }} />
 
