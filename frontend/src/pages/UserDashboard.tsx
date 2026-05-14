@@ -12,7 +12,6 @@ const calculateProrata = (startDate: string): number => {
   return parseFloat(((basePrice / daysInMonth) * remainingDays).toFixed(2));
 };
 
-const formatDateFR = (dateString: string) => new Date(dateString).toLocaleDateString('fr-FR');
 
 const UserDashboard = () => {
   const [user, setUser] = useState<any>({ nom: '', prenom: '', email: '', cars: [] });
@@ -271,7 +270,7 @@ const UserDashboard = () => {
               <div className="pt-5">
                 {message && <p className="text-[9px] font-bold text-emerald-400 uppercase text-center mb-4 animate-pulse tracking-widest">{message}</p>}
                 <button 
-                  onClick={handleUpdate} 
+                  onClick={handleSaveProfile} 
                   disabled={isSaving} 
                   className="w-full gold-gradient text-[#0A0A0A] py-4 rounded-[1.5rem] font-black uppercase text-[10px] tracking-[0.2em] hover:shadow-lg hover:shadow-amber-900/20 transition-all disabled:opacity-30 flex items-center justify-center gap-3"
                 >
