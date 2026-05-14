@@ -3,15 +3,6 @@ import { Car, Mail, Plus, Trash2, Save, MapPin, Calendar, Receipt, Download, Cre
 import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
 
-const calculateProrata = (startDate: string): number => {
-  const date = new Date(startDate);
-  if (isNaN(date.getTime())) return 0;
-  const basePrice = 240;
-  const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  const remainingDays = daysInMonth - date.getDate() + 1;
-  return parseFloat(((basePrice / daysInMonth) * remainingDays).toFixed(2));
-};
-
 
 const UserDashboard = () => {
   const [user, setUser] = useState<any>({ nom: '', prenom: '', email: '', cars: [] });
