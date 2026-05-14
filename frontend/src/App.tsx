@@ -5,6 +5,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import UserDashboard from './pages/UserDashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import NotFound from './pages/NotFound';
 import Navigation from './components/Header';
 
 const App: React.FC = () => {
@@ -27,7 +28,7 @@ const App: React.FC = () => {
 
             <Route path="/" element={<RootRedirect />} />
             
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </div>

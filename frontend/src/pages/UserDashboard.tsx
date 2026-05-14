@@ -182,7 +182,8 @@ const UserDashboard = () => {
                   const now = new Date();
                   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
                   const monthName = nextMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-                  const totalProchain = mySlots.reduce((total, s) => total + (s.price || calculateProrata(s.startDate)), 0);
+                  // Le mois prochain est toujours facturé à taux plein (240€) par place
+                  const totalProchain = mySlots.length * 240;
                   return (
                     <div className="p-6 flex items-center justify-between opacity-40 border-t border-white/5">
                       <div className="flex items-center gap-4">
