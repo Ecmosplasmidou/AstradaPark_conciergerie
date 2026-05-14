@@ -30,8 +30,8 @@ export class Invoice extends Document {
   @Prop({ required: true })
   periodEnd: string;
 
-  @Prop({ required: true, enum: ['prorata', 'mensuel'] })
-  type: 'prorata' | 'mensuel';
+  @Prop({ required: true, enum: ['prorata', 'mensuel', 'globale'] })
+  type: 'prorata' | 'mensuel' | 'globale';
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

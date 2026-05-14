@@ -1,4 +1,5 @@
-import { Injectable, OnModuleInit, ForbiddenException } from '@nestjs/common';
+import { Injectable, OnModuleInit, ForbiddenException, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ParkingSlot } from './schemas/parking.schema';
@@ -6,6 +7,8 @@ import { InvoiceService } from './invoice.service';
 
 @Injectable()
 export class ParkingService implements OnModuleInit {
+  private readonly logger = new Logger(ParkingService.name);
+
   constructor(
     @InjectModel(ParkingSlot.name) private parkingModel: Model<ParkingSlot>,
     private readonly invoiceService: InvoiceService,
@@ -34,7 +37,7 @@ export class ParkingService implements OnModuleInit {
             email: 'yann@mail.com',
             carModel: 'Porsche 911',
             startDate: today,
-            price: this.calculateProrata(today),
+            price: this.calculatePrice(today),
           });
         } else {
           slots.push({ number: i, status: 'disponible' });
@@ -49,18 +52,25 @@ export class ParkingService implements OnModuleInit {
     return "Les places existent déjà.";
   }
 
-  calculateProrata(startDate: string): number {
+  calculatePrice(startDate: string, endDate?: string): number {
+    const start = new Date(startDate);
+    if (isNaN(start.getTime())) return 0;
+
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!isNaN(end.getTime())) {
+        const diffTime = end.getTime() - start.getTime();
+        // S'assurer que le nombre de jours est d'au moins 1
+        const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+        return diffDays * 8;
+      }
+    }
+
     const basePrice = 240;
-    const date = new Date(startDate);
-
-    // Sécurité anti-NaN : si la date est invalide, on retourne 0
-    if (isNaN(date.getTime())) return 0;
-
-    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-    const remainingDays = daysInMonth - date.getDate() + 1;
+    const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+    const remainingDays = daysInMonth - start.getDate() + 1;
     
-    const result = (basePrice / daysInMonth) * remainingDays;
-    return parseFloat(result.toFixed(2));
+    return parseFloat(((basePrice / daysInMonth) * remainingDays).toFixed(2));
   }
 
   async findAll(): Promise<ParkingSlot[]> {
@@ -77,10 +87,11 @@ export class ParkingService implements OnModuleInit {
       if (!updateData.startDate) {
         updateData.startDate = new Date().toISOString().split('T')[0];
       }
-      updateData.price = this.calculateProrata(updateData.startDate);
+      updateData.price = this.calculatePrice(updateData.startDate, updateData.endDate);
     } else if (updateData.status === 'disponible') {
       updateData.price = 0;
       updateData.startDate = null;
+      updateData.endDate = null;
     }
 
     const updatedSlot = await this.parkingModel.findOneAndUpdate(
@@ -94,10 +105,37 @@ export class ParkingService implements OnModuleInit {
       try {
         await this.invoiceService.createProrataInvoice(updatedSlot);
       } catch (error) {
-        console.error(`Erreur création facture prorata: ${error.message}`);
+        this.logger.error(`Erreur création facture prorata: ${error.message}`);
       }
     }
 
     return updatedSlot;
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async checkAndLiberateExpiredSlots() {
+    this.logger.log('Vérification des places expirées...');
+    const today = new Date().toISOString().split('T')[0];
+    
+    // On cherche les places avec une date de fin dépassée
+    const expiredSlots = await this.parkingModel.find({ 
+      status: 'occupé', 
+      endDate: { $lt: today, $ne: null } 
+    }).exec();
+
+    for (const slot of expiredSlots) {
+      this.logger.log(`Libération automatique de la place #${slot.number} (expirée le ${slot.endDate})`);
+      await this.updateSlot(slot.number, {
+        status: 'disponible',
+        nom: null,
+        prenom: null,
+        userId: null,
+        email: null,
+        carModel: null,
+        licensePlate: null,
+        startDate: null,
+        endDate: null
+      });
+    }
   }
 }

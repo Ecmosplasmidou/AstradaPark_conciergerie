@@ -28,6 +28,9 @@ export class ParkingSlot extends Document {
   startDate?: string;
 
   @Prop()
+  endDate?: string;
+
+  @Prop()
   price?: number;
 }
 

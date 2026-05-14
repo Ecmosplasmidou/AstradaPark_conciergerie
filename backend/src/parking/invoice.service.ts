@@ -44,7 +44,7 @@ export class InvoiceService {
     const now = new Date();
     const startDate = slot.startDate;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const periodEnd = lastDay.toISOString().split('T')[0];
+    const periodEnd = slot.endDate || lastDay.toISOString().split('T')[0];
 
     const invoiceNumber = await this.generateInvoiceNumber();
 
@@ -58,7 +58,7 @@ export class InvoiceService {
       amount: slot.price,
       periodStart: startDate,
       periodEnd,
-      type: 'prorata',
+      type: slot.endDate ? 'globale' : 'prorata',
     });
 
     const saved = await invoice.save();
@@ -73,7 +73,11 @@ export class InvoiceService {
   async handleMonthlyInvoices() {
     this.logger.log('=== Démarrage de la facturation mensuelle ===');
 
-    const occupiedSlots = await this.parkingModel.find({ status: 'occupé' }).exec();
+    // On ignore les places avec une endDate car elles ont été facturées globalement
+    const occupiedSlots = await this.parkingModel.find({ 
+      status: 'occupé', 
+      $or: [{ endDate: null }, { endDate: { $exists: false } }] 
+    }).exec();
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
