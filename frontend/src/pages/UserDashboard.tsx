@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Car, Mail, Plus, Trash2, Save, MapPin, Calendar, Receipt, Download, CreditCard } from 'lucide-react';
+import { Car, Mail, Plus, Trash2, Save, MapPin, Calendar, Receipt, Download } from 'lucide-react';
 import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
 
