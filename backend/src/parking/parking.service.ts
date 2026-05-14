@@ -72,11 +72,15 @@ export class ParkingService implements OnModuleInit {
       throw new ForbiddenException("La place 30 est réservée.");
     }
 
-    // Calcul automatique du prix si on occupe une place
-    if (updateData.status === 'occupé' && updateData.startDate) {
+    // Calcul automatique du prix et de la date si on occupe une place
+    if (updateData.status === 'occupé') {
+      if (!updateData.startDate) {
+        updateData.startDate = new Date().toISOString().split('T')[0];
+      }
       updateData.price = this.calculateProrata(updateData.startDate);
     } else if (updateData.status === 'disponible') {
-      updateData.price = 0; // Reset du prix
+      updateData.price = 0;
+      updateData.startDate = null;
     }
 
     const updatedSlot = await this.parkingModel.findOneAndUpdate(
