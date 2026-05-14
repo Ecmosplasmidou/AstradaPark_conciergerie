@@ -46,6 +46,7 @@ const AdminDashboard = () => {
         nom: selectedUser.nom,
         prenom: selectedUser.prenom,
         userId: selectedUser._id,
+        email: selectedUser.email,
         carModel: selectedCar.model,
         licensePlate: selectedCar.plate
       });
@@ -102,6 +103,7 @@ const AdminDashboard = () => {
                     nom: null,
                     prenom: null,
                     userId: null,
+                    email: null,
                     carModel: null,
                     licensePlate: null
                 });
