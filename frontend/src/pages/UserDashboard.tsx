@@ -197,38 +197,6 @@ const UserDashboard = () => {
                 ) : (
                   <div className="p-10 text-center text-white/15 font-semibold uppercase text-[10px] tracking-[0.2em]">Aucune facture disponible</div>
                 )}
-
-                {/* Prochaine facturation */}
-                {mySlots.length > 0 && (() => {
-                  const now = new Date();
-                  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-                  const monthName = nextMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-                  // Le mois prochain est toujours facturé à taux plein (240€) par place,
-                  // sauf si la place a une date de fin prévue pendant le mois en cours ou avant.
-                  const activeSlotsNextMonth = mySlots.filter(s => {
-                    if (!s.endDate) return true;
-                    const endDate = new Date(s.endDate);
-                    const lastDayOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                    return endDate > lastDayOfThisMonth;
-                  });
-                  const totalProchain = activeSlotsNextMonth.length * 240;
-                  return (
-                    <div className="p-6 flex items-center justify-between opacity-40 border-t border-white/5">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-white/5 rounded-2xl flex items-center justify-center text-white/30 border border-white/5">
-                          <CreditCard size={20} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-tight text-white/50">Prochaine facture — {monthName}</p>
-                          <p className="text-[10px] font-semibold text-[#D4A853]/50 uppercase tracking-widest">En attente de prélèvement</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-black text-white/30">{totalProchain.toFixed(2)} €</p>
-                      </div>
-                    </div>
-                  );
-                })()}
               </div>
             </section>
           </div>
