@@ -14,6 +14,8 @@ const AdminDashboard = () => {
   const [showConfirmModal, setShowConfirmModal] = useState<number | null>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'parking' | 'invoices'>('parking');
+  const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [assignEndDate, setAssignEndDate] = useState('');
 
   useEffect(() => { fetchData(); }, []);
 
@@ -48,15 +50,33 @@ const AdminDashboard = () => {
         userId: selectedUser._id,
         email: selectedUser.email,
         carModel: selectedCar.model,
-        licensePlate: selectedCar.plate
+        licensePlate: selectedCar.plate,
+        startDate: assignStartDate,
+        endDate: assignEndDate || null
       });
       resetSelection();
       fetchData();
     } catch (err) { alert("Erreur d'attribution"); }
   };
 
+  const handleUpdateEndDate = async (newEndDate: string) => {
+    if (!selectedSlot) return;
+    try {
+      await api.patch(`/parking/${selectedSlot.number}`, {
+        status: 'occupé',
+        endDate: newEndDate || null
+      });
+      fetchData();
+      alert("Date de fin mise à jour");
+    } catch(err) {
+      alert("Erreur de mise à jour");
+    }
+  };
+
   const resetSelection = () => {
     setSelectedSlot(null); setSelectedUser(null); setSelectedCar(null); setSearchTerm('');
+    setAssignStartDate(new Date().toISOString().split('T')[0]);
+    setAssignEndDate('');
   };
 
   const filteredUsers = searchTerm.length > 0 ? users.filter(u => u.nom.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())) : [];
@@ -235,6 +255,10 @@ const AdminDashboard = () => {
                     <p className="text-xs font-bold text-white/70 uppercase">{selectedSlot.prenom} {selectedSlot.nom}</p>
                     <p className="text-[10px] text-[#D4A853]/60 italic">{selectedSlot.carModel} — {selectedSlot.licensePlate}</p>
                     <p className="text-[9px] text-white/30 uppercase tracking-widest">Depuis le {selectedSlot.startDate}</p>
+                    <div className="pt-3 mt-3 border-t border-white/10">
+                      <p className="text-[9px] text-[#D4A853]/50 uppercase tracking-widest mb-2">Date de fin prévue</p>
+                      <input type="date" defaultValue={selectedSlot.endDate || ''} onChange={e => handleUpdateEndDate(e.target.value)} className="w-full bg-black/30 border border-white/5 rounded-xl p-3 text-xs text-white outline-none focus:border-[#D4A853]/30" />
+                    </div>
                   </div>
                   <button onClick={() => setShowConfirmModal(selectedSlot.number)} className="w-full bg-rose-500/10 text-rose-400 py-5 rounded-2xl font-black uppercase text-xs tracking-widest border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all">
                     Révoquer l'accès
@@ -294,6 +318,17 @@ const AdminDashboard = () => {
                         })}
                       </div>
 
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-[9px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Début</p>
+                          <input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white focus:ring-2 focus:ring-[#D4A853]/50 outline-none" />
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Fin (Optionnel)</p>
+                          <input type="date" value={assignEndDate} onChange={e => setAssignEndDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white focus:ring-2 focus:ring-[#D4A853]/50 outline-none" />
+                        </div>
+                      </div>
+
                       <button onClick={handleAssign} disabled={!selectedCar} className="w-full gold-gradient text-[#0A0A0A] py-5 rounded-2xl font-black uppercase text-xs tracking-widest disabled:opacity-20 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-amber-900/20 transition-all">
                         Valider l'accès
                       </button>
@@ -321,6 +356,10 @@ const AdminDashboard = () => {
                       <p className="text-xs font-bold text-white/70 uppercase">{selectedSlot.prenom} {selectedSlot.nom}</p>
                       <p className="text-[10px] text-[#D4A853]/60 italic">{selectedSlot.carModel} — {selectedSlot.licensePlate}</p>
                       <p className="text-[9px] text-white/30 uppercase tracking-widest">Depuis le {selectedSlot.startDate}</p>
+                      <div className="pt-3 mt-3 border-t border-white/10">
+                        <p className="text-[9px] text-[#D4A853]/50 uppercase tracking-widest mb-2">Date de fin prévue</p>
+                        <input type="date" defaultValue={selectedSlot.endDate || ''} onChange={e => handleUpdateEndDate(e.target.value)} className="w-full bg-black/30 border border-white/5 rounded-xl p-3 text-xs text-white outline-none focus:border-[#D4A853]/30" />
+                      </div>
                     </div>
                     <button onClick={() => setShowConfirmModal(selectedSlot.number)} className="w-full bg-rose-500/10 text-rose-400 py-4 rounded-2xl font-black uppercase text-xs tracking-widest border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all">
                       Révoquer l'accès
@@ -373,6 +412,16 @@ const AdminDashboard = () => {
                               </button>
                             );
                           })}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div>
+                            <p className="text-[8px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-1">Début</p>
+                            <input type="date" value={assignStartDate} onChange={e => setAssignStartDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white outline-none" />
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-1">Fin</p>
+                            <input type="date" value={assignEndDate} onChange={e => setAssignEndDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white outline-none" />
+                          </div>
                         </div>
                         <button onClick={handleAssign} disabled={!selectedCar} className="w-full gold-gradient text-[#0A0A0A] py-4 rounded-2xl font-black uppercase text-xs tracking-widest disabled:opacity-20 disabled:cursor-not-allowed transition-all">
                           Valider l'accès

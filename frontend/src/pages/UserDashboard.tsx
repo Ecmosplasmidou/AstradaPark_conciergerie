@@ -10,6 +10,7 @@ const UserDashboard = () => {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [invoiceFilterMonth, setInvoiceFilterMonth] = useState<string>('all');
 
   useEffect(() => {
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
@@ -110,7 +111,9 @@ const UserDashboard = () => {
                           </div>
                           <div className="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/5">
                             <Calendar size={14} className="text-[#D4A853]/60" />
-                            <span className="font-bold text-[10px] uppercase tracking-tight text-white/70">Depuis le {slot.startDate}</span>
+                            <span className="font-bold text-[10px] uppercase tracking-tight text-white/70">
+                              {slot.endDate ? `Du ${slot.startDate} au ${slot.endDate}` : `Depuis le ${slot.startDate}`}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -126,14 +129,41 @@ const UserDashboard = () => {
 
             {/* SECTION FACTURATION */}
             <section className="space-y-5">
-              <div className="flex items-center gap-2 ml-1">
-                <Receipt size={12} className="text-[#D4A853]/50" />
-                <h3 className="text-[10px] font-semibold text-[#D4A853]/60 uppercase tracking-[0.3em]">Mes Factures ({invoices.length})</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2 ml-1">
+                  <Receipt size={12} className="text-[#D4A853]/50" />
+                  <h3 className="text-[10px] font-semibold text-[#D4A853]/60 uppercase tracking-[0.3em]">Mes Factures ({invoices.length})</h3>
+                </div>
+                {invoices.length > 0 && (() => {
+                  const months = Array.from(new Set(invoices.map(inv => {
+                    const d = new Date(inv.periodStart);
+                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                  }))).sort((a, b) => b.localeCompare(a));
+                  
+                  return (
+                    <select 
+                      value={invoiceFilterMonth} 
+                      onChange={e => setInvoiceFilterMonth(e.target.value)}
+                      className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs text-white outline-none focus:border-[#D4A853]/50 transition-colors"
+                    >
+                      <option value="all">Tous les mois</option>
+                      {months.map(m => {
+                        const [year, month] = m.split('-');
+                        const monthName = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                        return <option key={m} value={m}>{monthName}</option>;
+                      })}
+                    </select>
+                  );
+                })()}
               </div>
               <div className="rounded-[2rem] border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
                 {invoices.length > 0 ? (
                   <div className="divide-y divide-white/5">
-                    {invoices.map((inv) => (
+                    {invoices.filter(inv => {
+                      if (invoiceFilterMonth === 'all') return true;
+                      const d = new Date(inv.periodStart);
+                      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === invoiceFilterMonth;
+                    }).map((inv) => (
                       <div key={inv._id} className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between hover:bg-white/[0.02] transition-colors">
                         <div className="flex items-center gap-4">
                           <div className="h-12 w-12 bg-[#D4A853]/10 rounded-2xl flex items-center justify-center text-[#D4A853] border border-[#D4A853]/15">
@@ -173,8 +203,15 @@ const UserDashboard = () => {
                   const now = new Date();
                   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
                   const monthName = nextMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-                  // Le mois prochain est toujours facturé à taux plein (240€) par place
-                  const totalProchain = mySlots.length * 240;
+                  // Le mois prochain est toujours facturé à taux plein (240€) par place,
+                  // sauf si la place a une date de fin prévue pendant le mois en cours ou avant.
+                  const activeSlotsNextMonth = mySlots.filter(s => {
+                    if (!s.endDate) return true;
+                    const endDate = new Date(s.endDate);
+                    const lastDayOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                    return endDate > lastDayOfThisMonth;
+                  });
+                  const totalProchain = activeSlotsNextMonth.length * 240;
                   return (
                     <div className="p-6 flex items-center justify-between opacity-40 border-t border-white/5">
                       <div className="flex items-center gap-4">
