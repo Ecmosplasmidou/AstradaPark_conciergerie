@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download } from 'lucide-react';
+import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download, MessageSquare, Clock, CheckCircle2, Send, Filter, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
 
@@ -13,7 +13,20 @@ const AdminDashboard = () => {
   const [selectedCar, setSelectedCar] = useState<any | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState<number | null>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'parking' | 'invoices'>('parking');
+  const [activeTab, setActiveTab] = useState<'parking' | 'invoices' | 'messages'>('parking');
+  
+  // Nouveaux états de filtres de factures
+  const [invoiceFilterName, setInvoiceFilterName] = useState('');
+  const [invoiceFilterCar, setInvoiceFilterCar] = useState('');
+  const [invoiceFilterMonth, setInvoiceFilterMonth] = useState('all');
+
+  // Nouveaux états de messagerie
+  const [messages, setMessages] = useState<any[]>([]);
+  const [replyContent, setReplyContent] = useState<{[key: string]: string}>({});
+  const [isReplying, setIsReplying] = useState<string | null>(null);
+  const [messageFilterStatus, setMessageFilterStatus] = useState<'all'|'nouveau'|'traité'|'clôturé'>('all');
+  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
+
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [assignEndDate, setAssignEndDate] = useState('');
 
@@ -29,6 +42,7 @@ const AdminDashboard = () => {
       setUsers(usersRes.data);
       setLoading(false);
       fetchInvoices();
+      fetchMessages();
     } catch (error) { console.error(error); }
   };
 
@@ -86,6 +100,51 @@ const AdminDashboard = () => {
       const res = await api.get('/invoices');
       setInvoices(res.data);
     } catch (error) { console.error('Erreur factures', error); }
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const res = await api.get('/messages');
+      setMessages(res.data);
+    } catch (error) { console.error('Erreur messages', error); }
+  };
+
+  const handleUpdateMessageStatus = async (id: string, status: string) => {
+    try {
+      await api.patch(`/messages/${id}`, { status });
+      fetchMessages();
+    } catch (error) {
+      alert("Erreur lors de la mise à jour du statut");
+    }
+  };
+
+  const handleReplyMessage = async (id: string) => {
+    if (!replyContent[id]?.trim()) return;
+    setIsReplying(id);
+    try {
+      await api.post(`/messages/${id}/reply`, { content: replyContent[id] });
+      setReplyContent(prev => ({...prev, [id]: ''}));
+      // On le passe aussi en traité automatiquement si ce n'est pas déjà le cas
+      const msg = messages.find(m => m._id === id);
+      if (msg && msg.status === 'nouveau') {
+        await api.patch(`/messages/${id}`, { status: 'traité' });
+      }
+      fetchMessages();
+    } catch (error) {
+      alert("Erreur lors de l'envoi de la réponse");
+    } finally {
+      setIsReplying(null);
+    }
+  };
+
+  const handleDeleteMessage = async (id: string) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce message ?")) return;
+    try {
+      await api.delete(`/messages/${id}`);
+      fetchMessages();
+    } catch (error) {
+      alert("Erreur lors de la suppression du message");
+    }
   };
 
   // Calcul des statistiques
@@ -191,6 +250,16 @@ const AdminDashboard = () => {
             activeTab === 'invoices' ? 'gold-gradient text-[#0A0A0A]' : 'bg-white/5 text-white/40 hover:text-white/70 border border-white/10'
           }`}>
             <Receipt size={14} className="inline mr-2 -mt-0.5" />Factures ({invoices.length})
+          </button>
+          <button onClick={() => setActiveTab('messages')} className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-all whitespace-nowrap relative ${
+            activeTab === 'messages' ? 'gold-gradient text-[#0A0A0A]' : 'bg-white/5 text-white/40 hover:text-white/70 border border-white/10'
+          }`}>
+            <MessageSquare size={14} className="inline mr-2 -mt-0.5" />Messages
+            {messages.filter(m => m.status === 'nouveau').length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 border-2 border-[#111118] text-[8px] text-white font-black animate-pulse shadow-lg shadow-rose-500/50">
+                {messages.filter(m => m.status === 'nouveau').length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -435,44 +504,345 @@ const AdminDashboard = () => {
             </div>
           )}
         </div>
-        ) : (
+        ) : activeTab === 'invoices' ? (
         /* SECTION FACTURES */
         <div className="rounded-[2rem] border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
-          <div className="p-6 border-b border-white/5">
-            <h2 className="text-lg font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Toutes les <span className="text-[#D4A853]">Factures</span></h2>
-            <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">{invoices.length} facture(s) émise(s)</p>
-          </div>
-          {invoices.length > 0 ? (
-            <div className="divide-y divide-white/5">
-              {invoices.map((inv: any) => (
-                <div key={inv._id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between hover:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="h-11 w-11 bg-[#D4A853]/10 rounded-xl flex items-center justify-center text-[#D4A853] border border-[#D4A853]/15">
-                      <Receipt size={18} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-white/70 uppercase tracking-tight">{inv.invoiceNumber}</p>
-                      <p className="text-[10px] font-medium text-white/40 mt-0.5">{inv.clientPrenom} {inv.clientNom} — Place #{inv.slotNumber}</p>
-                      <p className="text-[9px] font-medium text-white/20 uppercase tracking-widest mt-0.5">
-                        {formatDateFR(inv.periodStart)} → {formatDateFR(inv.periodEnd)} · {inv.type === 'prorata' ? 'Prorata' : 'Mensuel'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 sm:ml-0 ml-15">
-                    <p className="text-sm font-black text-[#D4A853]">{inv.amount.toFixed(2)} €</p>
-                    <button 
-                      onClick={() => generateInvoicePDF(inv)}
-                      className="h-9 w-9 bg-white/5 text-[#D4A853] rounded-lg flex items-center justify-center hover:bg-[#D4A853] hover:text-[#0A0A0A] transition-all border border-white/10 hover:border-[#D4A853] cursor-pointer"
-                    >
-                      <Download size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+          <div className="p-6 border-b border-white/5 bg-white/[0.01]">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Toutes les <span className="text-[#D4A853]">Factures</span></h2>
+                <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">Recherche et filtrage multicritères</p>
+              </div>
             </div>
-          ) : (
-            <div className="p-10 text-center text-white/15 font-semibold uppercase text-[10px] tracking-[0.2em]">Aucune facture émise</div>
-          )}
+
+            {/* FILTRES FACTURES */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Filtre Nom */}
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
+                <input 
+                  type="text" 
+                  placeholder="Rechercher par nom..." 
+                  value={invoiceFilterName}
+                  onChange={(e) => setInvoiceFilterName(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 pl-10 text-xs text-white placeholder:text-white/20 focus:ring-2 focus:ring-[#D4A853]/30 outline-none transition-all"
+                />
+              </div>
+
+              {/* Filtre Voiture */}
+              <div className="relative">
+                <Car className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
+                <input 
+                  type="text" 
+                  placeholder="Modèle ou plaque..." 
+                  value={invoiceFilterCar}
+                  onChange={(e) => setInvoiceFilterCar(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 pl-10 text-xs text-white placeholder:text-white/20 focus:ring-2 focus:ring-[#D4A853]/30 outline-none transition-all"
+                />
+              </div>
+
+              {/* Filtre Période */}
+              <div className="relative flex">
+                <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
+                <select 
+                  value={invoiceFilterMonth}
+                  onChange={(e) => setInvoiceFilterMonth(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 pl-10 pr-8 text-xs text-white outline-none focus:ring-2 focus:ring-[#D4A853]/30 transition-all appearance-none"
+                >
+                  <option value="all">Toutes les périodes</option>
+                  {Array.from(new Set(invoices.map(inv => {
+                    const d = new Date(inv.periodStart);
+                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                  }))).sort((a, b) => b.localeCompare(a)).map(m => {
+                    const [year, month] = m.split('-');
+                    const monthName = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                    return <option key={m} value={m}>{monthName.charAt(0).toUpperCase() + monthName.slice(1)}</option>;
+                  })}
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          {(() => {
+            // Application des 3 filtres indépendants
+            const filteredInvoices = invoices.filter(inv => {
+              const matchName = !invoiceFilterName || 
+                (inv.clientNom?.toLowerCase() || '').includes(invoiceFilterName.toLowerCase()) || 
+                (inv.clientPrenom?.toLowerCase() || '').includes(invoiceFilterName.toLowerCase());
+              
+              const matchCar = !invoiceFilterCar || 
+                (inv.carModel?.toLowerCase() || '').includes(invoiceFilterCar.toLowerCase()) ||
+                (inv.licensePlate?.toLowerCase() || '').includes(invoiceFilterCar.toLowerCase());
+              
+              const matchMonth = invoiceFilterMonth === 'all' || (() => {
+                const d = new Date(inv.periodStart);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === invoiceFilterMonth;
+              })();
+
+              return matchName && matchCar && matchMonth;
+            });
+
+            return filteredInvoices.length > 0 ? (
+              <div className="divide-y divide-white/5">
+                {filteredInvoices.map((inv: any) => (
+                  <div key={inv._id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between hover:bg-white/[0.02] transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="h-11 w-11 bg-[#D4A853]/10 rounded-xl flex items-center justify-center text-[#D4A853] border border-[#D4A853]/15">
+                        <Receipt size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-white/70 uppercase tracking-tight">{inv.invoiceNumber}</p>
+                        <p className="text-[10px] font-medium text-white/40 mt-0.5">{inv.clientPrenom} {inv.clientNom} — Place #{inv.slotNumber}</p>
+                        <p className="text-[9px] font-medium text-white/20 uppercase tracking-widest mt-0.5">
+                          {formatDateFR(inv.periodStart)} → {formatDateFR(inv.periodEnd)} · {inv.type === 'prorata' ? 'Prorata' : 'Mensuel'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 sm:ml-0 ml-15">
+                      <div className="text-right">
+                        <p className="text-sm font-black text-[#D4A853]">{inv.amount.toFixed(2)} €</p>
+                        <p className="text-[8px] font-bold text-white/30 uppercase">{inv.carModel}</p>
+                      </div>
+                      <button 
+                        onClick={() => generateInvoicePDF(inv)}
+                        className="h-9 w-9 bg-white/5 text-[#D4A853] rounded-lg flex items-center justify-center hover:bg-[#D4A853] hover:text-[#0A0A0A] transition-all border border-white/10 hover:border-[#D4A853] cursor-pointer"
+                      >
+                        <Download size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-16 text-center text-white/15">
+                <Filter size={32} className="mx-auto mb-4 opacity-50" />
+                <p className="font-semibold uppercase text-[10px] tracking-[0.2em]">Aucune facture ne correspond aux filtres</p>
+                {(invoiceFilterName || invoiceFilterCar || invoiceFilterMonth !== 'all') && (
+                  <button 
+                    onClick={() => { setInvoiceFilterName(''); setInvoiceFilterCar(''); setInvoiceFilterMonth('all'); }}
+                    className="mt-4 text-[#D4A853] text-[10px] font-bold uppercase tracking-widest hover:underline"
+                  >
+                    Réinitialiser les filtres
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+        ) : (
+        /* SECTION MESSAGERIE ADMIN */
+        <div className="rounded-[2rem] border border-white/5 overflow-hidden flex flex-col min-h-[600px]" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          <div className="p-6 border-b border-white/5 bg-white/[0.01]">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <div>
+                <h2 className="text-xl font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Centre de <span className="text-[#D4A853]">Messagerie</span></h2>
+                <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">{messages.filter(m => m.status === 'nouveau').length} message(s) en attente de traitement</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setMessageFilterStatus('all')} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${messageFilterStatus === 'all' ? 'bg-[#D4A853]/20 text-[#D4A853] border border-[#D4A853]/30' : 'bg-white/5 text-white/40 hover:text-white/80 border border-transparent'}`}>Tous</button>
+                <button onClick={() => setMessageFilterStatus('nouveau')} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${messageFilterStatus === 'nouveau' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' : 'bg-white/5 text-white/40 hover:text-white/80 border border-transparent'}`}>Nouveau</button>
+                <button onClick={() => setMessageFilterStatus('traité')} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${messageFilterStatus === 'traité' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-white/40 hover:text-white/80 border border-transparent'}`}>Traité</button>
+                <button onClick={() => setMessageFilterStatus('clôturé')} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${messageFilterStatus === 'clôturé' ? 'bg-white/20 text-white border border-white/30' : 'bg-white/5 text-white/40 hover:text-white/80 border border-transparent'}`}>Clôturé</button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+            {/* Liste des tickets */}
+            <div className={`md:w-1/3 border-r border-white/5 overflow-y-auto no-scrollbar bg-black/20 flex flex-col ${expandedMessageId ? 'hidden md:flex' : 'flex'}`}>
+              {messages.filter(m => messageFilterStatus === 'all' || m.status === messageFilterStatus).length > 0 ? (
+                <div className="divide-y divide-white/5 flex-1 overflow-y-auto">
+                  {messages.filter(m => messageFilterStatus === 'all' || m.status === messageFilterStatus).map((msg: any) => (
+                    <div 
+                      key={msg._id} 
+                      onClick={() => setExpandedMessageId(msg._id)}
+                      className={`p-5 cursor-pointer transition-colors border-l-2 ${
+                        expandedMessageId === msg._id 
+                          ? 'bg-white/[0.04] border-[#D4A853]' 
+                          : msg.status === 'nouveau' 
+                            ? 'bg-[#D4A853]/[0.02] border-amber-500/50 hover:bg-white/[0.02]' 
+                            : 'border-transparent hover:bg-white/[0.02]'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-black text-white uppercase tracking-widest truncate">{msg.userPrenom} {msg.userNom}</span>
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${
+                          msg.status === 'nouveau' ? 'bg-amber-500 animate-pulse' : 
+                          msg.status === 'traité' ? 'bg-emerald-400' : 
+                          'bg-white/20'
+                        }`} />
+                      </div>
+                      <h4 className={`text-sm mb-1 truncate ${expandedMessageId === msg._id ? 'font-black text-[#D4A853]' : 'font-bold text-white/80'}`}>{msg.subject}</h4>
+                      <p className="text-[10px] text-white/40 truncate">{msg.initialMessage}</p>
+                      <p className="text-[8px] text-white/20 uppercase tracking-widest mt-2">{formatDateFR(msg.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-10 text-center text-white/15">
+                  <p className="font-semibold uppercase text-[10px] tracking-[0.2em]">Aucun ticket</p>
+                </div>
+              )}
+            </div>
+
+            {/* Détail du ticket & Fil de discussion */}
+            <div className={`flex-1 flex flex-col bg-[#0A0A0A]/50 relative h-[500px] md:h-auto ${expandedMessageId ? 'flex' : 'hidden md:flex'}`}>
+              {expandedMessageId && messages.find(m => m._id === expandedMessageId) ? (() => {
+                const msg = messages.find(m => m._id === expandedMessageId);
+                return (
+                  <>
+                    {/* En-tête mobile */}
+                    <div className="md:hidden p-4 border-b border-white/5 flex items-center bg-white/[0.02]">
+                      <button onClick={() => setExpandedMessageId(null)} className="flex items-center text-[#D4A853] text-[10px] font-bold uppercase tracking-widest">
+                        <span className="mr-2">← Retour aux tickets</span>
+                      </button>
+                    </div>
+
+                    {/* Header Détail */}
+                    <div className="p-5 border-b border-white/5 bg-white/[0.02] flex justify-between items-center shrink-0">
+                      <div>
+                        <h3 className="text-lg font-black text-[#D4A853] mb-1">{msg.subject}</h3>
+                        <p className="text-[10px] font-medium text-white/40 uppercase tracking-widest">
+                          Ticket de : <span className="text-white/80">{msg.userPrenom} {msg.userNom}</span> ({msg.userEmail})
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <select 
+                          value={msg.status} 
+                          onChange={(e) => handleUpdateMessageStatus(msg._id, e.target.value)}
+                          disabled={msg.status === 'clôturé'}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest outline-none border appearance-none ${
+                            msg.status === 'clôturé' ? 'cursor-not-allowed opacity-70 ' : 'cursor-pointer '
+                          } ${
+                            msg.status === 'nouveau' ? 'bg-amber-500/10 text-amber-500 border-amber-500/30' : 
+                            msg.status === 'traité' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 
+                            'bg-white/10 text-white/60 border-white/20'
+                          }`}
+                        >
+                          <option value="nouveau">Statut: Nouveau</option>
+                          <option value="traité">Statut: Traité</option>
+                          <option value="clôturé">Statut: Clôturé</option>
+                        </select>
+                        <button 
+                          onClick={() => { handleDeleteMessage(msg._id); setExpandedMessageId(null); }}
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors"
+                          title="Supprimer le ticket"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Zone des messages (scrollable) */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col">
+                      {/* Message initial (User) */}
+                      <div className="flex gap-4 max-w-[85%] self-start">
+                        <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-white/50 shrink-0 mt-1">
+                          <Users size={14} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{msg.userPrenom}</span>
+                            <span className="text-[8px] text-white/30">{new Date(msg.createdAt).toLocaleString('fr-FR')}</span>
+                          </div>
+                          <div className="bg-white/[0.05] border border-white/10 p-4 rounded-2xl rounded-tl-sm text-sm text-white/80 leading-relaxed shadow-sm">
+                            {msg.initialMessage || msg.content} {/* Fallback old schema */}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Fallback old schema adminReply */}
+                      {msg.adminReply && (!msg.replies || msg.replies.length === 0) && (
+                        <div className="flex gap-4 max-w-[85%] self-end flex-row-reverse">
+                          <div className="w-8 h-8 rounded-xl bg-[#D4A853]/20 flex items-center justify-center text-[#D4A853] shrink-0 mt-1">
+                            <Shield size={14} />
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-center justify-end gap-2 mb-1">
+                              <span className="text-[8px] text-[#D4A853]/50">{new Date(msg.updatedAt).toLocaleString('fr-FR')}</span>
+                              <span className="text-[10px] font-bold text-[#D4A853] uppercase tracking-widest">Support</span>
+                            </div>
+                            <div className="bg-[#D4A853]/10 border border-[#D4A853]/20 p-4 rounded-2xl rounded-tr-sm text-sm text-[#D4A853]/90 leading-relaxed shadow-sm text-left">
+                              {msg.adminReply}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Liste des réponses (nouveau schéma) */}
+                      {msg.replies && msg.replies.map((reply: any, idx: number) => (
+                        <div key={idx} className={`flex gap-4 max-w-[85%] ${reply.sender === 'admin' ? 'self-end flex-row-reverse' : 'self-start'}`}>
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 ${reply.sender === 'admin' ? 'bg-[#D4A853]/20 text-[#D4A853]' : 'bg-white/10 text-white/50'}`}>
+                            {reply.sender === 'admin' ? <Shield size={14} /> : <Users size={14} />}
+                          </div>
+                          <div className={reply.sender === 'admin' ? 'text-right' : 'text-left'}>
+                            <div className={`flex items-center gap-2 mb-1 ${reply.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                              {reply.sender === 'admin' ? (
+                                <>
+                                  <span className="text-[8px] text-[#D4A853]/50">{new Date(reply.createdAt).toLocaleString('fr-FR')}</span>
+                                  <span className="text-[10px] font-bold text-[#D4A853] uppercase tracking-widest">Support</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{msg.userPrenom}</span>
+                                  <span className="text-[8px] text-white/30">{new Date(reply.createdAt).toLocaleString('fr-FR')}</span>
+                                </>
+                              )}
+                            </div>
+                            <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm text-left ${
+                              reply.sender === 'admin' 
+                                ? 'bg-[#D4A853]/10 border border-[#D4A853]/20 rounded-tr-sm text-[#D4A853]/90' 
+                                : 'bg-white/[0.05] border border-white/10 rounded-tl-sm text-white/80'
+                            }`}>
+                              {reply.content}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Zone de réponse */}
+                    {msg.status !== 'clôturé' && (
+                      <div className="p-5 border-t border-white/5 bg-black/40 shrink-0">
+                        <div className="flex gap-3 relative">
+                          <textarea 
+                            value={replyContent[msg._id] || ''}
+                            onChange={(e) => setReplyContent({...replyContent, [msg._id]: e.target.value})}
+                            placeholder="Écrire votre réponse au client..."
+                            className="flex-1 bg-white/[0.03] border border-white/10 rounded-2xl p-4 text-sm text-white placeholder:text-white/30 focus:ring-2 focus:ring-[#D4A853]/40 focus:border-[#D4A853]/30 outline-none resize-none h-[60px]"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleReplyMessage(msg._id);
+                              }
+                            }}
+                          />
+                          <button 
+                            onClick={() => handleReplyMessage(msg._id)}
+                            disabled={!replyContent[msg._id]?.trim() || isReplying === msg._id}
+                            className="bg-[#D4A853] text-black w-[60px] rounded-2xl flex items-center justify-center hover:bg-[#e2b865] hover:shadow-lg hover:shadow-[#D4A853]/20 transition-all disabled:opacity-50"
+                          >
+                            <Send size={20} className={isReplying === msg._id ? "animate-pulse" : ""} />
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-white/30 mt-2 text-center uppercase tracking-widest">Appuyez sur Entrée pour envoyer</p>
+                      </div>
+                    )}
+                    {msg.status === 'clôturé' && (
+                      <div className="p-4 border-t border-white/5 bg-white/[0.02] shrink-0 text-center">
+                        <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest"><CheckCircle2 size={12} className="inline mr-1 -mt-0.5" /> Ticket clôturé, aucune réponse possible.</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })() : (
+                <div className="h-full flex flex-col items-center justify-center text-white/10">
+                  <MessageSquare size={48} className="mb-4 opacity-30" />
+                  <p className="font-semibold uppercase text-[10px] tracking-[0.3em]">Sélectionnez un ticket pour l'afficher</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         )}
       </div>

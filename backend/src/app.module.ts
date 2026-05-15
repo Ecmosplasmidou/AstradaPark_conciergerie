@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { ParkingModule } from './parking/parking.module';
+import { MessagesModule } from './messages/messages.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { MailerModule } from '@nestjs-modules/mailer';
 import * as ejs from 'ejs';
@@ -15,6 +16,7 @@ import * as ejs from 'ejs';
     MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/parking'),
     AuthModule,
     ParkingModule,
+    MessagesModule,
     MailerModule.forRoot({
       transport: {
         host: 'sandbox.smtp.mailtrap.io',

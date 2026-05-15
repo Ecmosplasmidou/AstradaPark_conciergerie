@@ -105,12 +105,12 @@ export class ParkingService implements OnModuleInit {
       { returnDocument: 'after' }
     ).exec();
 
-    // Créer automatiquement une facture prorata à l'assignation
+    // Créer automatiquement une facture initiale à l'assignation
     if (updatedSlot && updateData.status === 'occupé' && updateData.startDate) {
       try {
-        await this.invoiceService.createProrataInvoice(updatedSlot);
+        await this.invoiceService.createInitialInvoice(updatedSlot);
       } catch (error) {
-        this.logger.error(`Erreur création facture prorata: ${error.message}`);
+        this.logger.error(`Erreur création facture initiale: ${error.message}`);
       }
     }
 

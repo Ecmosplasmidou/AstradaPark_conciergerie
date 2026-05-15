@@ -38,14 +38,76 @@ export class InvoiceService {
   }
 
   /**
-   * Crée une facture prorata lors de la première assignation d'une place
+   * Calcule le montant d'une facture : nb de jours × 8€
    */
-  async createProrataInvoice(slot: any): Promise<Invoice> {
-    const now = new Date();
-    const startDate = slot.startDate;
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const periodEnd = slot.endDate || lastDay.toISOString().split('T')[0];
+  private calculateAmount(periodStart: string, periodEnd: string): number {
+    const start = new Date(periodStart);
+    const end = new Date(periodEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+    const diffMs = end.getTime() - start.getTime();
+    const diffDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+    return parseFloat((diffDays * 8).toFixed(2));
+  }
 
+  /**
+   * Retourne la date de fin du mois pour une date donnée (format YYYY-MM-DD)
+   */
+  private endOfMonth(dateStr: string): string {
+    const d = new Date(dateStr);
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return lastDay.toISOString().split('T')[0];
+  }
+
+  /**
+   * Retourne le premier jour du mois suivant (format YYYY-MM-DD)
+   */
+  private firstDayOfNextMonth(dateStr: string): string {
+    const d = new Date(dateStr);
+    const first = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    return first.toISOString().split('T')[0];
+  }
+
+  /**
+   * Compare deux dates (YYYY-MM-DD) : retourne true si a <= b
+   */
+  private dateLE(a: string, b: string): boolean {
+    return new Date(a) <= new Date(b);
+  }
+
+  /**
+   * À l'assignation d'une place : génère la PREMIÈRE facture (du startDate jusqu'à la fin du mois
+   * ou jusqu'à endDate si endDate est dans le même mois).
+   * 
+   * Logique : on génère UNE seule facture pour la période initiale.
+   * Les factures suivantes (mois suivants) seront générées par le CRON le 1er de chaque mois.
+   */
+  async createInitialInvoice(slot: any): Promise<Invoice | null> {
+    const startDate = slot.startDate;
+    if (!startDate) return null;
+
+    // Fin du mois du startDate
+    const monthEnd = this.endOfMonth(startDate);
+
+    // Fin réelle de la période : endDate si fournie et dans le même mois, sinon fin du mois
+    let periodEnd: string;
+    if (slot.endDate && this.dateLE(slot.endDate, monthEnd)) {
+      periodEnd = slot.endDate;
+    } else {
+      periodEnd = monthEnd;
+    }
+
+    // Vérifier qu'on n'a pas déjà une facture pour cette place sur cette période
+    const existing = await this.invoiceModel.findOne({
+      slotNumber: slot.number,
+      periodStart: startDate,
+    }).exec();
+
+    if (existing) {
+      this.logger.log(`Facture initiale déjà existante pour place #${slot.number}`);
+      return existing;
+    }
+
+    const amount = this.calculateAmount(startDate, periodEnd);
     const invoiceNumber = await this.generateInvoiceNumber();
 
     const invoice = new this.invoiceModel({
@@ -55,39 +117,56 @@ export class InvoiceService {
       clientEmail: slot.email,
       slotNumber: slot.number,
       carModel: slot.carModel || '',
-      amount: slot.price,
+      amount,
       periodStart: startDate,
       periodEnd,
       type: slot.endDate ? 'globale' : 'prorata',
     });
 
     const saved = await invoice.save();
-    this.logger.log(`Facture prorata ${invoiceNumber} créée pour ${slot.email} — ${slot.price}€`);
+    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${amount}€`);
     return saved;
   }
 
   /**
-   * CRON : Chaque 1er du mois à minuit, génère les factures mensuelles
+   * CRON : Chaque 1er du mois à minuit
+   * Génère les factures pour le mois courant pour toutes les places encore actives.
+   * 
+   * Exemples :
+   * - Slot sans endDate → facture du 1er au dernier jour du mois (ex: 01/06 → 30/06 = 30j × 8€)
+   * - Slot avec endDate dans ce mois → facture du 1er au endDate (ex: 01/08 → 01/08 = 1j × 8€)
+   * - Slot dont endDate est déjà passé → ignoré (CRON de libération s'en charge)
    */
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
   async handleMonthlyInvoices() {
     this.logger.log('=== Démarrage de la facturation mensuelle ===');
 
-    // On ignore les places avec une endDate car elles ont été facturées globalement
-    const occupiedSlots = await this.parkingModel.find({ 
-      status: 'occupé', 
-      $or: [{ endDate: null }, { endDate: { $exists: false } }] 
-    }).exec();
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
+    // Toutes les places actives dont le startDate est antérieur au 1er de ce mois
+    const occupiedSlots = await this.parkingModel.find({
+      status: 'occupé',
+    }).exec();
+
     for (const slot of occupiedSlots) {
+      // Si le slot a démarré ce mois-ci (>= firstDay), sa facture initiale a déjà été créée à l'assignation
+      if (slot.startDate && slot.startDate >= firstDay) {
+        this.logger.log(`Place #${slot.number} : démarrée ce mois, facture initiale déjà émise`);
+        continue;
+      }
+
+      // Si la place a une endDate passée, le CRON de libération s'en charge
+      if (slot.endDate && slot.endDate < firstDay) {
+        this.logger.log(`Place #${slot.number} : endDate déjà passé, ignorée`);
+        continue;
+      }
+
       // Vérifier qu'on n'a pas déjà facturé ce mois pour cette place
       const existing = await this.invoiceModel.findOne({
         slotNumber: slot.number,
         periodStart: firstDay,
-        type: 'mensuel',
       }).exec();
 
       if (existing) {
@@ -96,6 +175,15 @@ export class InvoiceService {
       }
 
       try {
+        // Fin de période : endDate si dans ce mois, sinon dernier jour du mois
+        let periodEnd: string;
+        if (slot.endDate && slot.endDate <= lastDay) {
+          periodEnd = slot.endDate;
+        } else {
+          periodEnd = lastDay;
+        }
+
+        const amount = this.calculateAmount(firstDay, periodEnd);
         const invoiceNumber = await this.generateInvoiceNumber();
 
         await this.invoiceModel.create({
@@ -105,18 +193,13 @@ export class InvoiceService {
           clientEmail: slot.email,
           slotNumber: slot.number,
           carModel: slot.carModel || '',
-          amount: 240,
+          amount,
           periodStart: firstDay,
-          periodEnd: lastDay,
+          periodEnd,
           type: 'mensuel',
         });
 
-        // Remettre le prix de la place à 240€ (mois complet)
-        if (slot.price !== 240) {
-          await this.parkingModel.updateOne({ _id: slot._id }, { price: 240 });
-        }
-
-        this.logger.log(`Facture mensuelle ${invoiceNumber} créée pour ${slot.email}`);
+        this.logger.log(`Facture mensuelle ${invoiceNumber} créée pour ${slot.email} — du ${firstDay} au ${periodEnd} — ${amount}€`);
       } catch (error) {
         this.logger.error(`Erreur facture place #${slot.number}: ${error.message}`);
       }
