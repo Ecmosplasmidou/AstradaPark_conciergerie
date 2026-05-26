@@ -122,10 +122,6 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...grey);
   doc.text(invoice.clientEmail, pageWidth - 90, yClient);
-  yClient += 5;
-  doc.text('7 bis, rue du Pont St Pierre', pageWidth - 90, yClient);
-  yClient += 5;
-  doc.text('31300 TOULOUSE', pageWidth - 90, yClient);
 
   // ═══════════════════════════════════════════
   // DÉTAILS DE LA FACTURE — TABLEAU
@@ -246,7 +242,7 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...grey);
   doc.setFont('helvetica', 'normal');
   doc.text('KELVAL SARL — 7 bis, rue du Pont St Pierre, 31300 TOULOUSE — SIRET : 438 527 640 00017', pageWidth / 2, footerY + 6, { align: 'center' });
-  doc.text('TVA applicable : 20% — Document établi pour le compte de la gestion locative', pageWidth / 2, footerY + 11, { align: 'center' });
+  doc.text('TVA applicable : 20%', pageWidth / 2, footerY + 11, { align: 'center' });
 
   // Bandeau inférieur doré
   doc.setFillColor(...gold);
