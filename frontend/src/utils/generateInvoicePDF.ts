@@ -37,11 +37,11 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   // ═══════════════════════════════════════════
   // EN-TÊTE ENTREPRISE
   // ═══════════════════════════════════════════
-  
+
   // Bandeau supérieur doré
   doc.setFillColor(...gold);
   doc.rect(0, 0, pageWidth, 4, 'F');
-  
+
   // Nom entreprise
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(24);
@@ -61,12 +61,12 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
   doc.text(invoice.invoiceNumber, pageWidth - 20, 28, { align: 'right' });
-  
+
   // Date de création
   doc.setFontSize(9);
   doc.setTextColor(...grey);
-  const dateCreation = invoice.createdAt 
-    ? new Date(invoice.createdAt).toLocaleDateString('fr-FR') 
+  const dateCreation = invoice.createdAt
+    ? new Date(invoice.createdAt).toLocaleDateString('fr-FR')
     : new Date().toLocaleDateString('fr-FR');
   doc.text(`Date : ${dateCreation}`, pageWidth - 20, 35, { align: 'right' });
 
@@ -85,7 +85,7 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
   doc.text('ÉMETTEUR', 20, y);
-  
+
   y += 8;
   doc.setFontSize(9);
   doc.setTextColor(...dark);
@@ -111,7 +111,7 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
   doc.text('DESTINATAIRE', pageWidth - 90, yClient);
-  
+
   yClient += 8;
   doc.setFontSize(10);
   doc.setTextColor(...dark);
@@ -128,93 +128,14 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.text('31300 TOULOUSE', pageWidth - 90, yClient);
 
   // ═══════════════════════════════════════════
-  // RÉFÉRENCES DE GESTION & BIEN
-  // ═══════════════════════════════════════════
-  const yBox = 104;
-  const boxWidth = pageWidth - 40;
-  const boxHeight = 32;
-
-  // Fond et bordure légers
-  doc.setFillColor(248, 248, 248);
-  doc.setDrawColor(...lightGrey);
-  doc.setLineWidth(0.2);
-  doc.rect(20, yBox, boxWidth, boxHeight, 'FD');
-
-  // Titre de la box
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...gold);
-  doc.text('RÉFÉRENCES DU BIEN & DE GESTION', 25, yBox + 6);
-
-  // Colonne 1 : Mandat & Bien
-  let yTxt = yBox + 12;
-  doc.setFontSize(7.5);
-  doc.setTextColor(...dark);
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('MANDAT :', 25, yTxt);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...grey);
-  doc.text('SANTO Jean Louis (0222)', 43, yTxt);
-
-  yTxt += 4.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text('BIEN :', 25, yTxt);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...grey);
-  doc.text('23 rue des Teinturiers (5282)', 37, yTxt);
-
-  yTxt += 4.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text('LOCAL :', 25, yTxt);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...grey);
-  doc.text(`Garage (0036) — Place #${invoice.slotNumber}`, 39, yTxt);
-
-  // Colonne 2 : Organisme de Gérance / Gestion
-  let yTxt2 = yBox + 12;
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text('ADMINISTRATEUR :', 100, yTxt2);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...grey);
-  doc.text("PLATEFORME DE L'IMMOBILIER GESTION", 132, yTxt2);
-
-  yTxt2 += 4.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text('ADRESSE :', 100, yTxt2);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...grey);
-  doc.text("116 route d'Espagne / Bât.2 - BAL 210, 31100 TOULOUSE", 118, yTxt2);
-
-  yTxt2 += 4.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text('CONTACTS :', 100, yTxt2);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...grey);
-  doc.text('05 34 60 51 33 | gestion@plateformedelimmobilier.com', 121, yTxt2);
-
-  yTxt2 += 4.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text('RÉFÉRENCES :', 100, yTxt2);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...grey);
-  doc.text('SIRET : 504829870 | Carte CPI 3101 2018 000 036 443', 125, yTxt2);
-
-  // ═══════════════════════════════════════════
   // DÉTAILS DE LA FACTURE — TABLEAU
   // ═══════════════════════════════════════════
-  const tableY = 145;
+  const tableY = 110;
 
   // En-tête du tableau
   doc.setFillColor(...dark);
   doc.rect(20, tableY, pageWidth - 40, 10, 'F');
-  
+
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(255, 255, 255);
@@ -230,12 +151,12 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  
-  const description = invoice.type === 'prorata' 
-    ? `Stationnement Place #${invoice.slotNumber} (prorata)` 
+
+  const description = invoice.type === 'prorata'
+    ? `Stationnement Place #${invoice.slotNumber} (prorata)`
     : `Stationnement Place #${invoice.slotNumber}`;
   doc.text(description, 25, rowY + 8);
-  
+
   if (invoice.carModel) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
@@ -295,28 +216,6 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...dark);
   doc.text(`${amountTVA.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
 
-  currentTotalY += 5;
-
-  // Ligne 3 : Total de l'échéance (TTC)
-  doc.setFontSize(8.5);
-  doc.setTextColor(...grey);
-  doc.setFont('helvetica', 'normal');
-  doc.text("Total de l'échéance", pageWidth - 85, currentTotalY);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text(`${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
-
-  currentTotalY += 5;
-
-  // Ligne 4 : Vos règlements à ce jour
-  doc.setFontSize(8.5);
-  doc.setTextColor(...grey);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Vos règlements à ce jour', pageWidth - 85, currentTotalY);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...dark);
-  doc.text(`-${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
-
   currentTotalY += 6;
 
   // Ligne de séparation pour le total final
@@ -324,15 +223,15 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setLineWidth(0.3);
   doc.line(pageWidth - 85, currentTotalY - 2, pageWidth - 20, currentTotalY - 2);
 
-  // Ligne 5 : Net à régler
+  // Ligne 3 : Total Net (TTC)
   doc.setFontSize(10);
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
-  doc.text('NET À RÉGLER', pageWidth - 85, currentTotalY + 3);
+  doc.text('TOTAL NET (TTC)', pageWidth - 85, currentTotalY + 3);
   doc.setFontSize(14);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
-  doc.text(`0.00 €`, pageWidth - 25, currentTotalY + 3, { align: 'right' });
+  doc.text(`${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY + 3, { align: 'right' });
 
   // ═══════════════════════════════════════════
   // PIED DE PAGE
