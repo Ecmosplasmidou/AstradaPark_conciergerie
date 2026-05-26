@@ -295,6 +295,28 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...dark);
   doc.text(`${amountTVA.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
 
+  currentTotalY += 5;
+
+  // Ligne 3 : Total de l'échéance (TTC)
+  doc.setFontSize(8.5);
+  doc.setTextColor(...grey);
+  doc.setFont('helvetica', 'normal');
+  doc.text("Total de l'échéance", pageWidth - 85, currentTotalY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text(`${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
+
+  currentTotalY += 5;
+
+  // Ligne 4 : Vos règlements à ce jour
+  doc.setFontSize(8.5);
+  doc.setTextColor(...grey);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Vos règlements à ce jour', pageWidth - 85, currentTotalY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text(`-${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
+
   currentTotalY += 6;
 
   // Ligne de séparation pour le total final
@@ -302,15 +324,15 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setLineWidth(0.3);
   doc.line(pageWidth - 85, currentTotalY - 2, pageWidth - 20, currentTotalY - 2);
 
-  // Ligne 3 : Total TTC
+  // Ligne 5 : Net à régler
   doc.setFontSize(10);
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL TTC', pageWidth - 85, currentTotalY + 3);
+  doc.text('NET À RÉGLER', pageWidth - 85, currentTotalY + 3);
   doc.setFontSize(14);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY + 3, { align: 'right' });
+  doc.text(`0.00 €`, pageWidth - 25, currentTotalY + 3, { align: 'right' });
 
   // ═══════════════════════════════════════════
   // PIED DE PAGE
