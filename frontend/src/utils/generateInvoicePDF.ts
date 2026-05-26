@@ -10,7 +10,7 @@ interface InvoiceData {
   amount: number;
   periodStart: string;
   periodEnd: string;
-  type: 'prorata' | 'mensuel';
+  type: 'prorata' | 'mensuel' | 'globale';
   createdAt?: string;
 }
 
