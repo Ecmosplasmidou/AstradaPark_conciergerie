@@ -19,6 +19,14 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // ═══════════════════════════════════════════
+  // CALCULS DE LA TVA (20%)
+  // ═══════════════════════════════════════════
+  const amountHT = invoice.amount;
+  const tvaRate = 0.20;
+  const amountTVA = amountHT * tvaRate;
+  const amountTTC = amountHT + amountTVA;
+
+  // ═══════════════════════════════════════════
   // COULEURS
   // ═══════════════════════════════════════════
   const gold = [212, 168, 83] as const;
@@ -102,23 +110,106 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setFontSize(8);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
-  doc.text('DESTINATAIRE', pageWidth - 80, yClient);
+  doc.text('DESTINATAIRE', pageWidth - 90, yClient);
   
   yClient += 8;
   doc.setFontSize(10);
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${invoice.clientPrenom} ${invoice.clientNom}`, pageWidth - 80, yClient);
+  doc.text(`${invoice.clientPrenom} ${invoice.clientNom}`, pageWidth - 90, yClient);
   yClient += 6;
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...grey);
-  doc.text(invoice.clientEmail, pageWidth - 80, yClient);
+  doc.text(invoice.clientEmail, pageWidth - 90, yClient);
+  yClient += 5;
+  doc.text('7 bis, rue du Pont St Pierre', pageWidth - 90, yClient);
+  yClient += 5;
+  doc.text('31300 TOULOUSE', pageWidth - 90, yClient);
+
+  // ═══════════════════════════════════════════
+  // RÉFÉRENCES DE GESTION & BIEN
+  // ═══════════════════════════════════════════
+  const yBox = 104;
+  const boxWidth = pageWidth - 40;
+  const boxHeight = 32;
+
+  // Fond et bordure légers
+  doc.setFillColor(248, 248, 248);
+  doc.setDrawColor(...lightGrey);
+  doc.setLineWidth(0.2);
+  doc.rect(20, yBox, boxWidth, boxHeight, 'FD');
+
+  // Titre de la box
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...gold);
+  doc.text('RÉFÉRENCES DU BIEN & DE GESTION', 25, yBox + 6);
+
+  // Colonne 1 : Mandat & Bien
+  let yTxt = yBox + 12;
+  doc.setFontSize(7.5);
+  doc.setTextColor(...dark);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('MANDAT :', 25, yTxt);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text('SANTO Jean Louis (0222)', 43, yTxt);
+
+  yTxt += 4.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text('BIEN :', 25, yTxt);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text('23 rue des Teinturiers (5282)', 37, yTxt);
+
+  yTxt += 4.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text('LOCAL :', 25, yTxt);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text(`Garage (0036) — Place #${invoice.slotNumber}`, 39, yTxt);
+
+  // Colonne 2 : Organisme de Gérance / Gestion
+  let yTxt2 = yBox + 12;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text('ADMINISTRATEUR :', 100, yTxt2);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text("PLATEFORME DE L'IMMOBILIER GESTION", 132, yTxt2);
+
+  yTxt2 += 4.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text('ADRESSE :', 100, yTxt2);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text("116 route d'Espagne / Bât.2 - BAL 210, 31100 TOULOUSE", 118, yTxt2);
+
+  yTxt2 += 4.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text('CONTACTS :', 100, yTxt2);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text('05 34 60 51 33 | gestion@plateformedelimmobilier.com', 121, yTxt2);
+
+  yTxt2 += 4.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text('RÉFÉRENCES :', 100, yTxt2);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text('SIRET : 504829870 | Carte CPI 3101 2018 000 036 443', 125, yTxt2);
 
   // ═══════════════════════════════════════════
   // DÉTAILS DE LA FACTURE — TABLEAU
   // ═══════════════════════════════════════════
-  const tableY = 110;
+  const tableY = 145;
 
   // En-tête du tableau
   doc.setFillColor(...dark);
@@ -129,7 +220,7 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(255, 255, 255);
   doc.text('DESCRIPTION', 25, tableY + 7);
   doc.text('PÉRIODE', 95, tableY + 7);
-  doc.text('MONTANT TTC', pageWidth - 25, tableY + 7, { align: 'right' });
+  doc.text('MONTANT HT', pageWidth - 25, tableY + 7, { align: 'right' });
 
   // Ligne de contenu
   const rowY = tableY + 10;
@@ -161,11 +252,11 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.text(`Du ${periodStartFr}`, 95, rowY + 8);
   doc.text(`au ${periodEndFr}`, 95, rowY + 14);
 
-  // Montant
+  // Montant HT
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...dark);
-  doc.text(`${invoice.amount.toFixed(2)} €`, pageWidth - 25, rowY + 11, { align: 'right' });
+  doc.text(`${amountHT.toFixed(2)} €`, pageWidth - 25, rowY + 11, { align: 'right' });
 
   // Bordure du tableau
   doc.setDrawColor(...lightGrey);
@@ -173,23 +264,53 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.rect(20, tableY, pageWidth - 40, 32);
 
   // ═══════════════════════════════════════════
-  // TOTAL
+  // TOTAL BREAKDOWN
   // ═══════════════════════════════════════════
-  const totalY = tableY + 42;
+  const totalY = tableY + 40;
 
+  // Ligne dorée de séparation
   doc.setDrawColor(...gold);
   doc.setLineWidth(0.5);
   doc.line(pageWidth - 85, totalY, pageWidth - 20, totalY);
 
-  doc.setFontSize(9);
+  let currentTotalY = totalY + 6;
+
+  // Ligne 1 : Total Hors Taxes (HT)
+  doc.setFontSize(8.5);
   doc.setTextColor(...grey);
   doc.setFont('helvetica', 'normal');
-  doc.text('TOTAL TTC', pageWidth - 85, totalY + 8);
+  doc.text('Total HT', pageWidth - 85, currentTotalY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text(`${amountHT.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
 
-  doc.setFontSize(16);
+  currentTotalY += 5;
+
+  // Ligne 2 : TVA (20%)
+  doc.setFontSize(8.5);
+  doc.setTextColor(...grey);
+  doc.setFont('helvetica', 'normal');
+  doc.text('TVA (20%)', pageWidth - 85, currentTotalY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...dark);
+  doc.text(`${amountTVA.toFixed(2)} €`, pageWidth - 25, currentTotalY, { align: 'right' });
+
+  currentTotalY += 6;
+
+  // Ligne de séparation pour le total final
+  doc.setDrawColor(...lightGrey);
+  doc.setLineWidth(0.3);
+  doc.line(pageWidth - 85, currentTotalY - 2, pageWidth - 20, currentTotalY - 2);
+
+  // Ligne 3 : Total TTC
+  doc.setFontSize(10);
+  doc.setTextColor(...dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL TTC', pageWidth - 85, currentTotalY + 3);
+  doc.setFontSize(14);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${invoice.amount.toFixed(2)} €`, pageWidth - 25, totalY + 9, { align: 'right' });
+  doc.text(`${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY + 3, { align: 'right' });
 
   // ═══════════════════════════════════════════
   // PIED DE PAGE
@@ -204,7 +325,7 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...grey);
   doc.setFont('helvetica', 'normal');
   doc.text('KELVAL SARL — 7 bis, rue du Pont St Pierre, 31300 TOULOUSE — SIRET : 438 527 640 00017', pageWidth / 2, footerY + 6, { align: 'center' });
-  doc.text('TVA non applicable, art. 293B du CGI', pageWidth / 2, footerY + 11, { align: 'center' });
+  doc.text('TVA applicable : 20% — Document établi pour le compte de la gestion locative', pageWidth / 2, footerY + 11, { align: 'center' });
 
   // Bandeau inférieur doré
   doc.setFillColor(...gold);

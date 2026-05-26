@@ -600,8 +600,9 @@ const AdminDashboard = () => {
                     </div>
                     <div className="flex items-center gap-4 sm:ml-0 ml-15">
                       <div className="text-right">
-                        <p className="text-sm font-black text-[#D4A853]">{inv.amount.toFixed(2)} €</p>
-                        <p className="text-[8px] font-bold text-white/30 uppercase">{inv.carModel}</p>
+                        <p className="text-sm font-black text-[#D4A853]">{(inv.amount * 1.20).toFixed(2)} €</p>
+                        <p className="text-[9px] font-bold text-emerald-400/70 uppercase tracking-widest">TTC</p>
+                        <p className="text-[8px] text-white/30 uppercase tracking-wider">({inv.amount.toFixed(2)} € HT)</p>
                       </div>
                       <button 
                         onClick={() => generateInvoicePDF(inv)}
