@@ -51,7 +51,7 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   // Sous-titre
   doc.setFontSize(9);
   doc.setTextColor(...gold);
-  doc.text('CONCIERGERIE AUTOMOBILE DE PRESTIGE', 20, 35);
+  doc.text('ASTRADA PARK HIPPODROME', 20, 35);
 
   // Numéro de facture (droite)
   doc.setFontSize(10);
@@ -84,26 +84,23 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setFontSize(8);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
-  doc.text('ÉMETTEUR', 20, y);
+  doc.text('ÉMETTEUR & GÉRANCE', 20, y);
 
-  y += 8;
+  y += 6;
   doc.setFontSize(9);
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
   doc.text('KELVAL SARL', 20, y);
-  y += 5;
+  y += 4.5;
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...grey);
-  doc.text('7 bis, rue du Pont St Pierre', 20, y);
-  y += 5;
-  doc.text('31300 TOULOUSE', 20, y);
-  y += 7;
-  doc.setFontSize(8);
-  doc.text('SIRET : 438 527 640 00017', 20, y);
-  y += 4;
-  doc.text('TVA Intracom : FR 62 438 527 640', 20, y);
-  y += 4;
-  doc.text('Tél : 06 64 944 540', 20, y);
+  doc.text('7 bis, rue du Pont St Pierre, 31300 TOULOUSE', 20, y);
+  y += 4.5;
+  doc.text('SIRET : 438 527 640 00017 | TVA Intracom : FR 62 438 527 640', 20, y);
+  y += 4.5;
+  doc.text('Carte Professionnelle : CPI 31012018000032033, délivrée par la CCI TOULOUSE', 20, y);
+  y += 4.5;
+  doc.text('Tél : 06 64 944 540 | Service Gérance : astradaparkhippodrme@gmail.com', 20, y);
 
   // Colonne droite : Client
   let yClient = 55;
@@ -112,16 +109,32 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setFont('helvetica', 'bold');
   doc.text('DESTINATAIRE', pageWidth - 90, yClient);
 
-  yClient += 8;
-  doc.setFontSize(10);
+  yClient += 6;
+  doc.setFontSize(9);
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
   doc.text(`${invoice.clientPrenom} ${invoice.clientNom}`, pageWidth - 90, yClient);
-  yClient += 6;
-  doc.setFontSize(9);
+  yClient += 4.5;
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...grey);
   doc.text(invoice.clientEmail, pageWidth - 90, yClient);
+
+  // Bien & Mandat
+  yClient += 8;
+  doc.setFontSize(8);
+  doc.setTextColor(...gold);
+  doc.setFont('helvetica', 'bold');
+  doc.text('BIEN & MANDAT', pageWidth - 90, yClient);
+
+  yClient += 6;
+  doc.setFontSize(9);
+  doc.setTextColor(...dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Mandat : SFERE BM SERVICES', pageWidth - 90, yClient);
+  yClient += 4.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...grey);
+  doc.text('Immeuble : 41 Rue Corneille - 31100 Toulouse', pageWidth - 90, yClient);
 
   // ═══════════════════════════════════════════
   // DÉTAILS DE LA FACTURE — TABLEAU
@@ -149,8 +162,8 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setFontSize(9);
 
   const description = invoice.type === 'prorata'
-    ? `Stationnement Place #${invoice.slotNumber} (prorata)`
-    : `Stationnement Place #${invoice.slotNumber}`;
+    ? `Place numéro : ${invoice.slotNumber} (prorata)`
+    : `Place numéro : ${invoice.slotNumber}`;
   doc.text(description, 25, rowY + 8);
 
   if (invoice.carModel) {
@@ -228,6 +241,31 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
   doc.text(`${amountTTC.toFixed(2)} €`, pageWidth - 25, currentTotalY + 3, { align: 'right' });
+
+  // ═══════════════════════════════════════════
+  // AVIS / DEMANDE DE PAIEMENT
+  // ═══════════════════════════════════════════
+  const noteY = currentTotalY + 15;
+  const noteText = "Cet avis est une demande de paiement et ne peut, en aucun cas, avoir valeur de quittance. Il porte sur les arriérés éventuels relatifs aux périodes précédentes. Le règlement des sommes dues doit être effectué, au plus tard, dans les cinq jours.";
+  
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(60, 60, 60);
+  
+  const splitNote = doc.splitTextToSize(noteText, pageWidth - 50);
+  const lineCount = splitNote.length;
+  const boxHeight = 10 + (lineCount * 4.5);
+
+  // Fond beige très clair élégant
+  doc.setFillColor(253, 251, 247);
+  doc.rect(20, noteY, pageWidth - 40, boxHeight, 'F');
+
+  // Ligne de bordure gauche dorée
+  doc.setFillColor(...gold);
+  doc.rect(20, noteY, 1.5, boxHeight, 'F');
+
+  // Affichage du texte
+  doc.text(splitNote, 26, noteY + 7);
 
   // ═══════════════════════════════════════════
   // PIED DE PAGE
