@@ -81,10 +81,6 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   let y = 55;
 
   // Colonne gauche : Entreprise
-  doc.setFontSize(5);
-  doc.setTextColor(...grey);
-  doc.text('Carte Professionnelle : CPI 31012018000032033, délivrée par la CCI TOULOUSE', 20, y);
-  y += 5;
   doc.setFontSize(8);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
@@ -100,11 +96,16 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...grey);
   doc.text('7 bis, rue du Pont St Pierre, 31300 TOULOUSE', 20, y);
   y += 4.5;
-  doc.text('SIRET : 438 527 640 00017 | TVA Intracom : FR 62 438 527 640', 20, y);
+  doc.text('SIRET : 438 527 640 00017', 20, y);
+  y += 4.5;
+  doc.text('TVA Intracom : FR 62 438 527 640', 20, y);
   y += 4.5;
   doc.text('Tél : 06 64 944 540', 20, y);
   y += 4.5;
-  doc.text('Service Gérance : astradaparkhippodrme@gmail.com', 20, y);
+  doc.text('Service Gérance : astradaparkhippodrome@gmail.com', 20, y);
+  y += 4.5;
+  doc.setFontSize(6);
+  doc.text('Carte Professionnelle : CPI 31012018000032033, délivrée par la CCI TOULOUSE', 20, y);
 
   // Colonne droite : Client
   let yClient = 55;
@@ -174,7 +175,6 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...grey);
-    doc.text(`Véhicule : ${invoice.carModel}`, 25, rowY + 14);
   }
 
   // Période
@@ -240,7 +240,7 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setFontSize(10);
   doc.setTextColor(...dark);
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL NET (TTC)', pageWidth - 85, currentTotalY + 3);
+  doc.text('TOTAL TTC', pageWidth - 85, currentTotalY + 3);
   doc.setFontSize(14);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
@@ -284,7 +284,6 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setTextColor(...grey);
   doc.setFont('helvetica', 'normal');
   doc.text('KELVAL SARL — 7 bis, rue du Pont St Pierre, 31300 TOULOUSE — SIRET : 438 527 640 00017', pageWidth / 2, footerY + 6, { align: 'center' });
-  doc.text('TVA applicable : 20%', pageWidth / 2, footerY + 11, { align: 'center' });
 
   // Bandeau inférieur doré
   doc.setFillColor(...gold);
