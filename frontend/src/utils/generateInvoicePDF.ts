@@ -81,6 +81,10 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   let y = 55;
 
   // Colonne gauche : Entreprise
+  doc.setFontSize(5);
+  doc.setTextColor(...grey);
+  doc.text('Carte Professionnelle : CPI 31012018000032033, délivrée par la CCI TOULOUSE', 20, y);
+  y += 5;
   doc.setFontSize(8);
   doc.setTextColor(...gold);
   doc.setFont('helvetica', 'bold');
@@ -98,9 +102,9 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   y += 4.5;
   doc.text('SIRET : 438 527 640 00017 | TVA Intracom : FR 62 438 527 640', 20, y);
   y += 4.5;
-  doc.text('Carte Professionnelle : CPI 31012018000032033, délivrée par la CCI TOULOUSE', 20, y);
+  doc.text('Tél : 06 64 944 540', 20, y);
   y += 4.5;
-  doc.text('Tél : 06 64 944 540 | Service Gérance : astradaparkhippodrme@gmail.com', 20, y);
+  doc.text('Service Gérance : astradaparkhippodrme@gmail.com', 20, y);
 
   // Colonne droite : Client
   let yClient = 55;
@@ -247,11 +251,11 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   // ═══════════════════════════════════════════
   const noteY = currentTotalY + 15;
   const noteText = "Cet avis est une demande de paiement et ne peut, en aucun cas, avoir valeur de quittance. Il porte sur les arriérés éventuels relatifs aux périodes précédentes. Le règlement des sommes dues doit être effectué, au plus tard, dans les cinq jours.";
-  
+
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(60, 60, 60);
-  
+
   const splitNote = doc.splitTextToSize(noteText, pageWidth - 50);
   const lineCount = splitNote.length;
   const boxHeight = 10 + (lineCount * 4.5);
