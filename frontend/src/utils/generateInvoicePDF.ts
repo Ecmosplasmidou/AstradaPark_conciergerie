@@ -12,6 +12,7 @@ interface InvoiceData {
   periodEnd: string;
   type: 'prorata' | 'mensuel' | 'globale';
   createdAt?: string;
+  isFirstMonth?: boolean;
 }
 
 export function generateInvoicePDF(invoice: InvoiceData): void {
@@ -19,10 +20,31 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // ═══════════════════════════════════════════
-  // CALCULS DE LA TVA (20%)
+  // CALCULS DES MONTANTS ET LIGNES DE FACTURE
   // ═══════════════════════════════════════════
-  const amountHT = invoice.amount;
+  const ADHESION_HT = 200;
+  const MENSUEL_HT = 240;
+  const CAUTION_HT = 240;
   const tvaRate = 0.20;
+
+  const isFirstMonth = invoice.isFirstMonth === true;
+
+  interface InvoiceLine {
+    description: string;
+    montant: number;
+  }
+
+  const invoiceLines: InvoiceLine[] = isFirstMonth
+    ? [
+        { description: 'Adhésion club', montant: ADHESION_HT },
+        { description: `Facturation du mois — Place n° ${invoice.slotNumber}`, montant: MENSUEL_HT },
+        { description: 'Caution : 1 mois de loyer', montant: CAUTION_HT },
+      ]
+    : [
+        { description: `Facturation du mois — Place n° ${invoice.slotNumber}`, montant: MENSUEL_HT },
+      ];
+
+  const amountHT = invoiceLines.reduce((sum, l) => sum + l.montant, 0);
   const amountTVA = amountHT * tvaRate;
   const amountTTC = amountHT + amountTVA;
 
@@ -144,63 +166,60 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   // ═══════════════════════════════════════════
   // DÉTAILS DE LA FACTURE — TABLEAU
   // ═══════════════════════════════════════════
+  const periodStartFr = formatDateFR(invoice.periodStart);
+  const periodEndFr = formatDateFR(invoice.periodEnd);
+
   const tableY = 110;
+  const ROW_HEIGHT = 16;
+  const tableHeaderH = 10;
+  const tableBodyH = invoiceLines.length * ROW_HEIGHT;
 
   // En-tête du tableau
   doc.setFillColor(...dark);
-  doc.rect(20, tableY, pageWidth - 40, 10, 'F');
+  doc.rect(20, tableY, pageWidth - 40, tableHeaderH, 'F');
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(255, 255, 255);
   doc.text('DESCRIPTION', 25, tableY + 7);
-  doc.text('PÉRIODE', 95, tableY + 7);
+  doc.text('PÉRIODE', 115, tableY + 7);
   doc.text('MONTANT HT', pageWidth - 25, tableY + 7, { align: 'right' });
 
-  // Ligne de contenu
-  const rowY = tableY + 10;
-  doc.setFillColor(248, 248, 248);
-  doc.rect(20, rowY, pageWidth - 40, 22, 'F');
+  // Lignes de contenu
+  invoiceLines.forEach((line, index) => {
+    const rowY = tableY + tableHeaderH + index * ROW_HEIGHT;
+    doc.setFillColor(index % 2 === 0 ? 248 : 242, index % 2 === 0 ? 248 : 242, index % 2 === 0 ? 248 : 242);
+    doc.rect(20, rowY, pageWidth - 40, ROW_HEIGHT, 'F');
 
-  doc.setTextColor(...dark);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...dark);
+    doc.text(line.description, 25, rowY + ROW_HEIGHT / 2 + 1.5);
 
-  const description = invoice.type === 'prorata'
-    ? `Place numéro : ${invoice.slotNumber} (prorata)`
-    : `Place numéro : ${invoice.slotNumber}`;
-  doc.text(description, 25, rowY + 8);
+    // Période sur la ligne mensuelle seulement
+    if (line.description.includes('Facturation du mois')) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...grey);
+      doc.text(`Du ${periodStartFr} au ${periodEndFr}`, 115, rowY + ROW_HEIGHT / 2 + 1.5);
+    }
 
-  if (invoice.carModel) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...grey);
-  }
-
-  // Période
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...grey);
-  const periodStartFr = formatDateFR(invoice.periodStart);
-  const periodEndFr = formatDateFR(invoice.periodEnd);
-  doc.text(`Du ${periodStartFr}`, 95, rowY + 8);
-  doc.text(`au ${periodEndFr}`, 95, rowY + 14);
-
-  // Montant HT
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...dark);
-  doc.text(`${amountHT.toFixed(2)} €`, pageWidth - 25, rowY + 11, { align: 'right' });
+    // Montant
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...dark);
+    doc.text(`${line.montant.toFixed(2)} €`, pageWidth - 25, rowY + ROW_HEIGHT / 2 + 1.5, { align: 'right' });
+  });
 
   // Bordure du tableau
   doc.setDrawColor(...lightGrey);
   doc.setLineWidth(0.3);
-  doc.rect(20, tableY, pageWidth - 40, 32);
+  doc.rect(20, tableY, pageWidth - 40, tableHeaderH + tableBodyH);
 
   // ═══════════════════════════════════════════
   // TOTAL BREAKDOWN
   // ═══════════════════════════════════════════
-  const totalY = tableY + 40;
+  const totalY = tableY + tableHeaderH + tableBodyH + 8;
 
   // Ligne dorée de séparation
   doc.setDrawColor(...gold);

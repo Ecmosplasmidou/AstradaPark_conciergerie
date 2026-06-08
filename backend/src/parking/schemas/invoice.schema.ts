@@ -32,6 +32,9 @@ export class Invoice extends Document {
 
   @Prop({ required: true, enum: ['prorata', 'mensuel', 'globale'] })
   type: 'prorata' | 'mensuel' | 'globale';
+
+  @Prop({ default: false })
+  isFirstMonth: boolean;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

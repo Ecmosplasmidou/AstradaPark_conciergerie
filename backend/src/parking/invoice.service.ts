@@ -107,7 +107,8 @@ export class InvoiceService {
       return existing;
     }
 
-    const amount = this.calculateAmount(startDate, periodEnd);
+    // Premier mois : adhésion 200 + mensuel 240 + caution 240 = 680 € HT
+    const FIRST_MONTH_AMOUNT = 680;
     const invoiceNumber = await this.generateInvoiceNumber();
 
     const invoice = new this.invoiceModel({
@@ -117,14 +118,15 @@ export class InvoiceService {
       clientEmail: slot.email,
       slotNumber: slot.number,
       carModel: slot.carModel || '',
-      amount,
+      amount: FIRST_MONTH_AMOUNT,
       periodStart: startDate,
       periodEnd,
-      type: slot.endDate ? 'globale' : 'prorata',
+      type: 'mensuel',
+      isFirstMonth: true,
     });
 
     const saved = await invoice.save();
-    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${amount}€`);
+    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${FIRST_MONTH_AMOUNT}€ HT (adhésion + mensuel + caution)`);
     return saved;
   }
 
@@ -183,7 +185,7 @@ export class InvoiceService {
           periodEnd = lastDay;
         }
 
-        const amount = this.calculateAmount(firstDay, periodEnd);
+        const MENSUEL_AMOUNT = 240;
         const invoiceNumber = await this.generateInvoiceNumber();
 
         await this.invoiceModel.create({
@@ -193,13 +195,14 @@ export class InvoiceService {
           clientEmail: slot.email,
           slotNumber: slot.number,
           carModel: slot.carModel || '',
-          amount,
+          amount: MENSUEL_AMOUNT,
           periodStart: firstDay,
           periodEnd,
           type: 'mensuel',
+          isFirstMonth: false,
         });
 
-        this.logger.log(`Facture mensuelle ${invoiceNumber} créée pour ${slot.email} — du ${firstDay} au ${periodEnd} — ${amount}€`);
+        this.logger.log(`Facture mensuelle ${invoiceNumber} créée pour ${slot.email} — du ${firstDay} au ${periodEnd} — ${MENSUEL_AMOUNT}€ HT`);
       } catch (error) {
         this.logger.error(`Erreur facture place #${slot.number}: ${error.message}`);
       }
@@ -220,5 +223,12 @@ export class InvoiceService {
    */
   async getAllInvoices(): Promise<Invoice[]> {
     return this.invoiceModel.find().sort({ createdAt: -1 }).exec();
+  }
+
+  /**
+   * Supprime une facture par son ID (admin uniquement)
+   */
+  async deleteInvoice(id: string): Promise<void> {
+    await this.invoiceModel.findByIdAndDelete(id).exec();
   }
 }

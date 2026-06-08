@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Req } from '@nestjs/common';
+import { Controller, Delete, Get, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -26,5 +26,16 @@ export class InvoiceController {
   @UseGuards(AuthGuard('jwt'))
   async getMyInvoices(@Req() req: any) {
     return this.invoiceService.getInvoicesByEmail(req.user.email);
+  }
+
+  /**
+   * DELETE /invoices/:id — Admin uniquement
+   */
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteInvoice(@Param('id') id: string, @Req() req: any) {
+    if (req.user.role !== 'admin') throw new ForbiddenException();
+    await this.invoiceService.deleteInvoice(id);
+    return { message: 'Facture supprimée' };
   }
 }

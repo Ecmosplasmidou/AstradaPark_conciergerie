@@ -147,6 +147,36 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleSecondMonthPDF = (inv: any) => {
+    const ref = new Date(inv.periodStart);
+    const y = ref.getFullYear();
+    const m = ref.getMonth(); // 0-indexed
+    const nextYear = m === 11 ? y + 1 : y;
+    const nextMonth = (m + 1) % 12; // 0-indexed
+    const lastDay = new Date(nextYear, nextMonth + 1, 0).getDate();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const periodStart = `${nextYear}-${pad(nextMonth + 1)}-01`;
+    const periodEnd = `${nextYear}-${pad(nextMonth + 1)}-${pad(lastDay)}`;
+    generateInvoicePDF({
+      ...inv,
+      invoiceNumber: `${inv.invoiceNumber}-M2`,
+      amount: 240,
+      periodStart,
+      periodEnd,
+      isFirstMonth: false,
+    });
+  };
+
+  const handleDeleteInvoice = async (id: string, invoiceNumber: string) => {
+    if (!window.confirm(`Supprimer la facture ${invoiceNumber} ?`)) return;
+    try {
+      await api.delete(`/invoices/${id}`);
+      fetchInvoices();
+    } catch (error) {
+      alert('Erreur lors de la suppression de la facture');
+    }
+  };
+
   // Calcul des statistiques
   const totalOccupied = slots.filter(s => s.status === 'occupé').length;
   const totalAvailable = slots.filter(s => s.status === 'disponible').length;
@@ -604,11 +634,29 @@ const AdminDashboard = () => {
                         <p className="text-[9px] font-bold text-emerald-400/70 uppercase tracking-widest">TTC</p>
                         <p className="text-[8px] text-white/30 uppercase tracking-wider">({inv.amount.toFixed(2)} € HT)</p>
                       </div>
-                      <button 
+                      <button
                         onClick={() => generateInvoicePDF(inv)}
+                        title="Télécharger la facture"
                         className="h-9 w-9 bg-white/5 text-[#D4A853] rounded-lg flex items-center justify-center hover:bg-[#D4A853] hover:text-[#0A0A0A] transition-all border border-white/10 hover:border-[#D4A853] cursor-pointer"
                       >
                         <Download size={14} />
+                      </button>
+                      {inv.isFirstMonth && (
+                        <button
+                          onClick={() => handleSecondMonthPDF(inv)}
+                          title="Générer la facture du 2ème mois (240 € HT)"
+                          className="h-9 px-2.5 bg-white/5 text-blue-400 rounded-lg flex items-center justify-center gap-1.5 hover:bg-blue-500/20 hover:text-blue-300 transition-all border border-white/10 hover:border-blue-500/40 cursor-pointer text-[9px] font-bold uppercase tracking-tight whitespace-nowrap"
+                        >
+                          <CalendarIcon size={12} />
+                          Mois 2
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteInvoice(inv._id, inv.invoiceNumber)}
+                        title="Supprimer la facture"
+                        className="h-9 w-9 bg-white/5 text-red-400/70 rounded-lg flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-all border border-white/10 hover:border-red-500/30 cursor-pointer"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
