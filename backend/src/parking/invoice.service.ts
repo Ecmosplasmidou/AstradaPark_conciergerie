@@ -37,34 +37,15 @@ export class InvoiceService {
     return `${prefix}-${String(seq).padStart(3, '0')}`;
   }
 
-  /**
-   * Calcule le montant d'une facture : nb de jours × 8€
-   */
-  private calculateAmount(periodStart: string, periodEnd: string): number {
-    const start = new Date(periodStart);
-    const end = new Date(periodEnd);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
-    const diffMs = end.getTime() - start.getTime();
-    const diffDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
-    return parseFloat((diffDays * 8).toFixed(2));
-  }
+  private pad(n: number): string { return String(n).padStart(2, '0'); }
 
   /**
    * Retourne la date de fin du mois pour une date donnée (format YYYY-MM-DD)
    */
   private endOfMonth(dateStr: string): string {
-    const d = new Date(dateStr);
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    return lastDay.toISOString().split('T')[0];
-  }
-
-  /**
-   * Retourne le premier jour du mois suivant (format YYYY-MM-DD)
-   */
-  private firstDayOfNextMonth(dateStr: string): string {
-    const d = new Date(dateStr);
-    const first = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-    return first.toISOString().split('T')[0];
+    const [y, m] = dateStr.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate(); // jour 0 du mois suivant = dernier jour du mois
+    return `${y}-${this.pad(m)}-${this.pad(lastDay)}`;
   }
 
   /**
@@ -107,8 +88,17 @@ export class InvoiceService {
       return existing;
     }
 
-    // Premier mois : adhésion 200 + mensuel 240 + caution 240 = 680 € HT
-    const FIRST_MONTH_AMOUNT = 680;
+    // Prorata temporis pour la facturation du mois
+    const [sy, sm, sd] = startDate.split('-').map(Number);
+    const [ey, em, ed] = periodEnd.split('-').map(Number);
+    const startLocal = new Date(sy, sm - 1, sd);
+    const endLocal = new Date(ey, em - 1, ed);
+    const daysInPeriod = Math.round((endLocal.getTime() - startLocal.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const mensuelHT = parseFloat((daysInPeriod * 8).toFixed(2));
+
+    // Premier mois : adhésion 200 + mensuel (prorata) + caution 240
+    const adhesionAmount = slot.adhesionAmount ?? 200;
+    const FIRST_MONTH_AMOUNT = parseFloat((adhesionAmount + mensuelHT + 240).toFixed(2));
     const invoiceNumber = await this.generateInvoiceNumber();
 
     const invoice = new this.invoiceModel({
@@ -123,10 +113,11 @@ export class InvoiceService {
       periodEnd,
       type: 'mensuel',
       isFirstMonth: true,
+      adhesionAmount,
     });
 
     const saved = await invoice.save();
-    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${FIRST_MONTH_AMOUNT}€ HT (adhésion + mensuel + caution)`);
+    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${FIRST_MONTH_AMOUNT}€ HT (adhésion + mensuel ${daysInPeriod}j×8€ + caution)`);
     return saved;
   }
 
@@ -144,8 +135,11 @@ export class InvoiceService {
     this.logger.log('=== Démarrage de la facturation mensuelle ===');
 
     const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1; // 1-indexé
+    const lastDayNum = new Date(y, m, 0).getDate();
+    const firstDay = `${y}-${this.pad(m)}-01`;
+    const lastDay = `${y}-${this.pad(m)}-${this.pad(lastDayNum)}`;
 
     // Toutes les places actives dont le startDate est antérieur au 1er de ce mois
     const occupiedSlots = await this.parkingModel.find({
@@ -204,7 +198,7 @@ export class InvoiceService {
 
         this.logger.log(`Facture mensuelle ${invoiceNumber} créée pour ${slot.email} — du ${firstDay} au ${periodEnd} — ${MENSUEL_AMOUNT}€ HT`);
       } catch (error) {
-        this.logger.error(`Erreur facture place #${slot.number}: ${error.message}`);
+        this.logger.error(`Erreur facture place #${slot.number}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 

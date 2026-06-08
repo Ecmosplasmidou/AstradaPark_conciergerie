@@ -35,6 +35,9 @@ export class Invoice extends Document {
 
   @Prop({ default: false })
   isFirstMonth: boolean;
+
+  @Prop({ default: 200 })
+  adhesionAmount: number;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

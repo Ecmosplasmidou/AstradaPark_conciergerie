@@ -29,6 +29,7 @@ const AdminDashboard = () => {
 
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [assignEndDate, setAssignEndDate] = useState('');
+  const [adhesionAmount, setAdhesionAmount] = useState<0 | 100 | 200>(200);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -66,7 +67,8 @@ const AdminDashboard = () => {
         carModel: selectedCar.model,
         licensePlate: selectedCar.plate,
         startDate: assignStartDate,
-        endDate: assignEndDate || null
+        endDate: assignEndDate || null,
+        adhesionAmount
       });
       resetSelection();
       fetchData();
@@ -91,6 +93,7 @@ const AdminDashboard = () => {
     setSelectedSlot(null); setSelectedUser(null); setSelectedCar(null); setSearchTerm('');
     setAssignStartDate(new Date().toISOString().split('T')[0]);
     setAssignEndDate('');
+    setAdhesionAmount(200);
   };
 
   const filteredUsers = searchTerm.length > 0 ? users.filter(u => u.nom.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())) : [];
@@ -417,6 +420,17 @@ const AdminDashboard = () => {
                         })}
                       </div>
 
+                      <div>
+                        <p className="text-[9px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Adhésion club</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([0, 100, 200] as const).map(val => (
+                            <button key={val} onClick={() => setAdhesionAmount(val)} className={`py-3 rounded-xl text-xs font-bold uppercase tracking-tight border transition-all ${adhesionAmount === val ? 'gold-gradient text-[#0A0A0A] border-[#D4A853]' : 'bg-white/5 text-white/50 border-white/10 hover:border-[#D4A853]/30 hover:text-white/70'}`}>
+                              {val === 0 ? 'Gratuite' : `${val} €`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <p className="text-[9px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Début</p>
@@ -511,6 +525,16 @@ const AdminDashboard = () => {
                               </button>
                             );
                           })}
+                        </div>
+                        <div className="mb-4">
+                          <p className="text-[8px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Adhésion club</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {([0, 100, 200] as const).map(val => (
+                              <button key={val} onClick={() => setAdhesionAmount(val)} className={`py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-tight border transition-all ${adhesionAmount === val ? 'gold-gradient text-[#0A0A0A] border-[#D4A853]' : 'bg-white/5 text-white/50 border-white/10 hover:border-[#D4A853]/30'}`}>
+                                {val === 0 ? 'Gratuite' : `${val} €`}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3 mb-4">
                           <div>
