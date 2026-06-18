@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download, MessageSquare, CheckCircle2, Send, Filter, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
+import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download, MessageSquare, CheckCircle2, Send, Filter, Calendar as CalendarIcon, Trash2, Table2, UserCircle, Mail, CreditCard, ChevronDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
 
@@ -13,7 +14,8 @@ const AdminDashboard = () => {
   const [selectedCar, setSelectedCar] = useState<any | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState<number | null>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'parking' | 'invoices' | 'messages'>('parking');
+  const [activeTab, setActiveTab] = useState<'parking' | 'invoices' | 'recap' | 'clients' | 'messages'>('parking');
+  const [clientSearch, setClientSearch] = useState('');
   
   // Nouveaux états de filtres de factures
   const [invoiceFilterName, setInvoiceFilterName] = useState('');
@@ -30,6 +32,25 @@ const AdminDashboard = () => {
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [assignEndDate, setAssignEndDate] = useState('');
   const [adhesionAmount, setAdhesionAmount] = useState<0 | 100 | 200>(200);
+  const [mensuelAmount, setMensuelAmount] = useState<number>(240);
+  const [cautionAmount, setCautionAmount] = useState<number>(240);
+
+  // État édition client (modal) + expansion factures
+  const [editingClientUser, setEditingClientUser] = useState<any | null>(null);
+  const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+  const [editClientForm, setEditClientForm] = useState<{ nom: string; prenom: string; mandat: string; immeuble: string; cars: { model: string; plate: string; bipNumber: string }[] }>({ nom: '', prenom: '', mandat: '', immeuble: '', cars: [] });
+
+  // État édition inline récap (cellule par cellule)
+  const [editingCell, setEditingCell] = useState<{
+    rowKey: string;
+    field: string; // 'nom' | 'prenom' | 'adhesion' | monthKey ('YYYY-MM')
+    slotNumber: number;
+    clientEmail: string;
+    clientNom: string | null;
+    clientPrenom: string | null;
+    inv?: any; // facture cible pour adhesion/month
+  } | null>(null);
+  const [editCellValue, setEditCellValue] = useState('');
 
   useEffect(() => { fetchData(); }, []);
 
@@ -47,14 +68,19 @@ const AdminDashboard = () => {
     } catch (error) { console.error(error); }
   };
 
-  const isCarAlreadyAssigned = (plate: string): boolean => {
-    return slots.some(s => s.status === 'occupé' && s.licensePlate === plate);
+  const isCarAlreadyAssigned = (car: { plate?: string; model?: string }): boolean => {
+    return slots.some(s => {
+      if (s.status !== 'occupé') return false;
+      if (car.plate && s.licensePlate === car.plate) return true;
+      if (car.model && selectedUser?.email && s.email === selectedUser.email && s.carModel === car.model) return true;
+      return false;
+    });
   };
 
   const handleAssign = async () => {
     if (!selectedSlot || !selectedUser || !selectedCar) return;
-    if (isCarAlreadyAssigned(selectedCar.plate)) {
-      alert(`Le véhicule ${selectedCar.plate} est déjà assigné à une place. Libérez-la d'abord.`);
+    if (isCarAlreadyAssigned(selectedCar)) {
+      alert(`Le véhicule ${selectedCar.plate || selectedCar.model} est déjà assigné à une place. Libérez-la d'abord.`);
       return;
     }
     try {
@@ -68,7 +94,9 @@ const AdminDashboard = () => {
         licensePlate: selectedCar.plate,
         startDate: assignStartDate,
         endDate: assignEndDate || null,
-        adhesionAmount
+        adhesionAmount,
+        mensuelAmount,
+        cautionAmount,
       });
       resetSelection();
       fetchData();
@@ -160,13 +188,16 @@ const AdminDashboard = () => {
     const pad = (n: number) => String(n).padStart(2, '0');
     const periodStart = `${nextYear}-${pad(nextMonth + 1)}-01`;
     const periodEnd = `${nextYear}-${pad(nextMonth + 1)}-${pad(lastDay)}`;
+    const invUser = users.find((u: any) => u.email === inv.clientEmail);
     generateInvoicePDF({
       ...inv,
       invoiceNumber: `${inv.invoiceNumber}-M2`,
-      amount: 240,
+      amount: inv.mensuelAmount ?? 240,
       periodStart,
       periodEnd,
       isFirstMonth: false,
+      mandat: invUser?.mandat,
+      immeuble: invUser?.immeuble,
     });
   };
 
@@ -177,6 +208,165 @@ const AdminDashboard = () => {
       fetchInvoices();
     } catch (error) {
       alert('Erreur lors de la suppression de la facture');
+    }
+  };
+
+  const handleSaveCell = async () => {
+    if (!editingCell) return;
+    const { field, slotNumber, clientEmail, clientNom, clientPrenom, inv } = editingCell;
+    try {
+      if (field === 'nom' || field === 'prenom') {
+        await api.patch('/invoices/update-client-name', {
+          slotNumber,
+          clientEmail,
+          clientNom: field === 'nom' ? editCellValue.trim() : (clientNom ?? ''),
+          clientPrenom: field === 'prenom' ? editCellValue.trim() : (clientPrenom ?? ''),
+        });
+      } else if (field === 'adhesion') {
+        if (inv) {
+          const newAdhesion = parseFloat(editCellValue) || 0;
+          const delta = newAdhesion - (inv.adhesionAmount ?? 200);
+          await api.patch(`/invoices/${inv._id}`, {
+            adhesionAmount: newAdhesion,
+            amount: parseFloat((inv.amount + delta).toFixed(2)),
+          });
+        }
+      } else {
+        // field = monthKey ('YYYY-MM')
+        if (inv) {
+          const newMensuelNet = parseFloat(editCellValue) || 0;
+          const newAmount = inv.isFirstMonth
+            ? parseFloat((newMensuelNet + (inv.adhesionAmount ?? 200)).toFixed(2))
+            : newMensuelNet;
+          await api.patch(`/invoices/${inv._id}`, { amount: newAmount });
+        }
+      }
+      setEditingCell(null);
+      fetchInvoices();
+    } catch (error) {
+      alert('Erreur lors de la mise à jour');
+    }
+  };
+
+  const handleDeleteRecapRow = async (slotNumber: number, clientEmail: string, nom: string, prenom: string) => {
+    if (!window.confirm(`Supprimer toutes les factures de ${prenom} ${nom} pour la place #${slotNumber} ?`)) return;
+    try {
+      await api.delete('/invoices/by-client', { data: { slotNumber, clientEmail } });
+      fetchInvoices();
+    } catch (error) {
+      alert('Erreur lors de la suppression');
+    }
+  };
+
+  const handleExportRecapExcel = () => {
+    const OWNER_SLOT = 30;
+    const mensuelNet = (inv: any) => inv.isFirstMonth
+      ? parseFloat((inv.amount - (inv.adhesionAmount ?? 200)).toFixed(2))
+      : (inv.amount as number);
+
+    const monthKeys = Array.from(new Set(invoices.map(inv => inv.periodStart.slice(0, 7)))).sort() as string[];
+    const monthLabel = (key: string) => {
+      const [y, m] = key.split('-').map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    };
+
+    const invBySlot: Record<number, any[]> = {};
+    invoices.forEach(inv => {
+      if (!invBySlot[inv.slotNumber]) invBySlot[inv.slotNumber] = [];
+      invBySlot[inv.slotNumber].push(inv);
+    });
+
+    // Construire les lignes
+    const rows: any[][] = [];
+    const header = ['N°', 'Nom', 'Prénom', 'Adhésion HT (€)', ...monthKeys.map(monthLabel), 'Total HT (€)', 'TVA 20% (€)', 'Total TTC (€)'];
+    rows.push(header);
+
+    slots.forEach(slot => {
+      const isOwner = slot.number === OWNER_SLOT;
+      const slotInvs = invBySlot[slot.number] || [];
+
+      if (isOwner) {
+        rows.push([`#${slot.number}`, slot.nom ?? '', slot.prenom ?? '', '', ...monthKeys.map(() => ''), 0, 0, 0]);
+        return;
+      }
+
+      if (slotInvs.length === 0) {
+        rows.push([`#${slot.number}`, slot.status === 'occupé' ? (slot.nom ?? '') : 'Disponible', slot.status === 'occupé' ? (slot.prenom ?? '') : '', '', ...monthKeys.map(() => ''), '', '', '']);
+        return;
+      }
+
+      const byClient: Record<string, any[]> = {};
+      slotInvs.forEach((inv: any) => {
+        if (!byClient[inv.clientEmail]) byClient[inv.clientEmail] = [];
+        byClient[inv.clientEmail].push(inv);
+      });
+
+      Object.entries(byClient).forEach(([email, clientInvs]) => {
+        const ref = clientInvs[0];
+        const firstInv = clientInvs.find((i: any) => i.isFirstMonth);
+        const adhesion = firstInv?.adhesionAmount ?? null;
+        const totalHT = clientInvs.reduce((s: number, inv: any) => s + mensuelNet(inv), 0);
+        const tva = parseFloat((totalHT * 0.20).toFixed(2));
+        const ttc = parseFloat((totalHT * 1.20).toFixed(2));
+        const hasLeft = slot.status !== 'occupé' || slot.email !== email;
+        const nomCell = `${ref.clientNom}${hasLeft ? ' (parti)' : ''}`;
+        const monthCells = monthKeys.map(key => {
+          const inv = clientInvs.find((i: any) => i.periodStart.slice(0, 7) === key);
+          return inv ? mensuelNet(inv) : '';
+        });
+        rows.push([`#${slot.number}`, nomCell, ref.clientPrenom ?? '', adhesion ?? '', ...monthCells, totalHT, tva, ttc]);
+      });
+    });
+
+    // Ligne de totaux
+    const grandTotalHT = invoices.filter(inv => inv.slotNumber !== OWNER_SLOT).reduce((s: number, inv: any) => s + mensuelNet(inv), 0);
+    const grandTVA = parseFloat((grandTotalHT * 0.20).toFixed(2));
+    const grandTTC = parseFloat((grandTotalHT * 1.20).toFixed(2));
+    const monthTotals = monthKeys.map(key =>
+      invoices.filter((inv: any) => inv.periodStart.slice(0, 7) === key && inv.slotNumber !== OWNER_SLOT)
+        .reduce((s: number, inv: any) => s + mensuelNet(inv), 0)
+    );
+    rows.push(['TOTAUX', '', '', '', ...monthTotals, grandTotalHT, grandTVA, grandTTC]);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Largeurs de colonnes
+    ws['!cols'] = [{ wch: 6 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, ...monthKeys.map(() => ({ wch: 14 })), { wch: 13 }, { wch: 12 }, { wch: 13 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Récap Annuel');
+    const year = new Date().getFullYear();
+    XLSX.writeFile(wb, `recap-astrada-${year}.xlsx`);
+  };
+
+  const handleDeleteUser = async (id: string, nom: string, prenom: string) => {
+    if (!window.confirm(`Supprimer le client ${prenom} ${nom} ?`)) return;
+    try {
+      await api.delete(`/auth/users/${id}`);
+      fetchData();
+    } catch (error) {
+      alert('Erreur lors de la suppression du client');
+    }
+  };
+
+  const openEditClient = (u: any) => {
+    setEditingClientUser(u);
+    setEditClientForm({
+      nom: u.nom ?? '',
+      prenom: u.prenom ?? '',
+      mandat: u.mandat ?? '',
+      immeuble: u.immeuble ?? '',
+      cars: u.cars ? u.cars.map((c: any) => ({ model: c.model ?? '', plate: c.plate ?? '', bipNumber: c.bipNumber ?? '' })) : [],
+    });
+  };
+
+  const handleSaveClientEdit = async () => {
+    if (!editingClientUser) return;
+    try {
+      await api.patch(`/auth/users/${editingClientUser._id}`, editClientForm);
+      setEditingClientUser(null);
+      fetchData();
+    } catch (error) {
+      alert('Erreur lors de la mise à jour');
     }
   };
 
@@ -194,6 +384,7 @@ const AdminDashboard = () => {
   );
 
   return (
+    <>
     <div className="min-h-screen p-4 sm:p-6 lg:p-8" style={{ background: 'linear-gradient(180deg, #0A0A0A 0%, #111118 50%, #0F0F0F 100%)' }}>
       <div className="max-w-[1800px] mx-auto">
 
@@ -283,6 +474,16 @@ const AdminDashboard = () => {
             activeTab === 'invoices' ? 'gold-gradient text-[#0A0A0A]' : 'bg-white/5 text-white/40 hover:text-white/70 border border-white/10'
           }`}>
             <Receipt size={14} className="inline mr-2 -mt-0.5" />Factures ({invoices.length})
+          </button>
+          <button onClick={() => setActiveTab('recap')} className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-all whitespace-nowrap ${
+            activeTab === 'recap' ? 'gold-gradient text-[#0A0A0A]' : 'bg-white/5 text-white/40 hover:text-white/70 border border-white/10'
+          }`}>
+            <Table2 size={14} className="inline mr-2 -mt-0.5" />Récap Annuel
+          </button>
+          <button onClick={() => setActiveTab('clients')} className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-all whitespace-nowrap ${
+            activeTab === 'clients' ? 'gold-gradient text-[#0A0A0A]' : 'bg-white/5 text-white/40 hover:text-white/70 border border-white/10'
+          }`}>
+            <Users size={14} className="inline mr-2 -mt-0.5" />Clients ({users.filter((u: any) => u.role !== 'admin').length})
           </button>
           <button onClick={() => setActiveTab('messages')} className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-all whitespace-nowrap relative ${
             activeTab === 'messages' ? 'gold-gradient text-[#0A0A0A]' : 'bg-white/5 text-white/40 hover:text-white/70 border border-white/10'
@@ -403,13 +604,13 @@ const AdminDashboard = () => {
                       <p className="text-[10px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] ml-1">Sélectionner le véhicule</p>
                       <div className="grid gap-3">
                         {selectedUser.cars.map((car: any, idx: number) => {
-                          const alreadyUsed = isCarAlreadyAssigned(car.plate);
+                          const alreadyUsed = isCarAlreadyAssigned(car);
                           return (
-                            <button key={idx} onClick={() => !alreadyUsed && setSelectedCar(car)} disabled={alreadyUsed} className={`p-4 rounded-xl border text-left transition-all ${
-                              alreadyUsed 
-                                ? 'opacity-30 cursor-not-allowed border-rose-500/20 bg-rose-500/[0.03]' 
-                                : selectedCar?.plate === car.plate 
-                                  ? 'border-[#D4A853]/40 bg-[#D4A853]/10' 
+                            <button key={idx} onClick={() => !alreadyUsed && setSelectedCar({ ...car, _idx: idx })} disabled={alreadyUsed} className={`p-4 rounded-xl border text-left transition-all ${
+                              alreadyUsed
+                                ? 'opacity-30 cursor-not-allowed border-rose-500/20 bg-rose-500/[0.03]'
+                                : selectedCar?._idx === idx
+                                  ? 'border-[#D4A853]/40 bg-[#D4A853]/10'
                                   : 'border-white/10 hover:border-[#D4A853]/30 bg-white/[0.02]'
                             }`}>
                               <p className="font-bold text-xs uppercase text-white/80">{car.model}</p>
@@ -428,6 +629,35 @@ const AdminDashboard = () => {
                               {val === 0 ? 'Gratuite' : `${val} €`}
                             </button>
                           ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-[9px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Mensuel HT</p>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              value={mensuelAmount}
+                              onChange={e => setMensuelAmount(parseFloat(e.target.value) || 0)} step={10}
+                              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 pr-8 text-xs font-bold text-white outline-none focus:border-[#D4A853]/50 text-right"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs font-bold pointer-events-none">€</span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Caution HT</p>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              value={cautionAmount}
+                              onChange={e => setCautionAmount(parseFloat(e.target.value) || 0)} step={10}
+                              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 pr-8 text-xs font-bold text-white outline-none focus:border-[#D4A853]/50 text-right"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs font-bold pointer-events-none">€</span>
+                          </div>
                         </div>
                       </div>
 
@@ -514,10 +744,10 @@ const AdminDashboard = () => {
                         <p className="text-[10px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] ml-1">Sélectionner le véhicule</p>
                         <div className="grid gap-2">
                           {selectedUser.cars.map((car: any, idx: number) => {
-                            const alreadyUsed = isCarAlreadyAssigned(car.plate);
+                            const alreadyUsed = isCarAlreadyAssigned(car);
                             return (
-                              <button key={idx} onClick={() => !alreadyUsed && setSelectedCar(car)} disabled={alreadyUsed} className={`p-3 rounded-xl border text-left transition-all ${
-                                alreadyUsed ? 'opacity-30 cursor-not-allowed border-rose-500/20' : selectedCar?.plate === car.plate ? 'border-[#D4A853]/40 bg-[#D4A853]/10' : 'border-white/10 bg-white/[0.02]'
+                              <button key={idx} onClick={() => !alreadyUsed && setSelectedCar({ ...car, _idx: idx })} disabled={alreadyUsed} className={`p-3 rounded-xl border text-left transition-all ${
+                                alreadyUsed ? 'opacity-30 cursor-not-allowed border-rose-500/20' : selectedCar?._idx === idx ? 'border-[#D4A853]/40 bg-[#D4A853]/10' : 'border-white/10 bg-white/[0.02]'
                               }`}>
                                 <p className="font-bold text-xs uppercase text-white/80">{car.model}</p>
                                 <p className="text-[10px] font-medium text-white/30 mt-0.5">{car.plate}</p>
@@ -534,6 +764,34 @@ const AdminDashboard = () => {
                                 {val === 0 ? 'Gratuite' : `${val} €`}
                               </button>
                             ))}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div>
+                            <p className="text-[8px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Mensuel HT</p>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="0"
+                                value={mensuelAmount}
+                                onChange={e => setMensuelAmount(parseFloat(e.target.value) || 0)} step={10}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 pr-7 text-xs font-bold text-white outline-none focus:border-[#D4A853]/50 text-right"
+                              />
+                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 text-xs font-bold pointer-events-none">€</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-semibold text-[#D4A853]/50 uppercase tracking-[0.2em] mb-2">Caution HT</p>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="0"
+                                value={cautionAmount}
+                                onChange={e => setCautionAmount(parseFloat(e.target.value) || 0)} step={10}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 pr-7 text-xs font-bold text-white outline-none focus:border-[#D4A853]/50 text-right"
+                              />
+                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 text-xs font-bold pointer-events-none">€</span>
+                            </div>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -659,7 +917,7 @@ const AdminDashboard = () => {
                         <p className="text-[8px] text-white/30 uppercase tracking-wider">({inv.amount.toFixed(2)} € HT)</p>
                       </div>
                       <button
-                        onClick={() => generateInvoicePDF(inv)}
+                        onClick={() => { const u = users.find((u: any) => u.email === inv.clientEmail); generateInvoicePDF({ ...inv, mandat: u?.mandat, immeuble: u?.immeuble }); }}
                         title="Télécharger la facture"
                         className="h-9 w-9 bg-white/5 text-[#D4A853] rounded-lg flex items-center justify-center hover:bg-[#D4A853] hover:text-[#0A0A0A] transition-all border border-white/10 hover:border-[#D4A853] cursor-pointer"
                       >
@@ -701,6 +959,472 @@ const AdminDashboard = () => {
               </div>
             );
           })()}
+        </div>
+        ) : activeTab === 'recap' ? (
+        /* SECTION RÉCAP ANNUEL */
+        (() => {
+          const OWNER_SLOT = 30;
+
+          // Extraire les mois uniques des factures (format YYYY-MM), triés chrono
+          const monthKeys = Array.from(new Set(
+            invoices.map(inv => inv.periodStart.slice(0, 7))
+          )).sort();
+
+          // Libellé français pour chaque mois
+          const monthLabel = (key: string) => {
+            const [y, m] = key.split('-').map(Number);
+            return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+          };
+
+          // Par slot : index des factures
+          const invBySlot: Record<number, any[]> = {};
+          invoices.forEach(inv => {
+            if (!invBySlot[inv.slotNumber]) invBySlot[inv.slotNumber] = [];
+            invBySlot[inv.slotNumber].push(inv);
+          });
+
+          // Montant mensuel d'une facture (hors adhésion)
+          const mensuelNet = (inv: any) => {
+            if (inv.isFirstMonth) return parseFloat((inv.amount - (inv.adhesionAmount ?? 200)).toFixed(2));
+            return inv.amount as number;
+          };
+
+          // Totaux par place et par mois (hors adhésion, propriétaire = 0)
+          const grandTotalHT = slots.reduce((sum, slot) => {
+            if (slot.number === OWNER_SLOT) return sum;
+            return sum + (invBySlot[slot.number] || []).reduce((s: number, inv: any) => s + mensuelNet(inv), 0);
+          }, 0);
+          const grandTVA = grandTotalHT * 0.20;
+          const grandTTC = grandTotalHT + grandTVA;
+          const colSpanTotal = 5 + monthKeys.length;
+
+          return (
+            <div className="rounded-[2rem] border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="p-6 border-b border-white/5 bg-white/[0.01] flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Récap <span className="text-[#D4A853]">des Factures</span></h2>
+                  <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">{monthKeys.length} mois · {slots.filter(s => s.status === 'occupé').length} place(s) occupée(s)</p>
+                </div>
+                <button
+                  onClick={handleExportRecapExcel}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#D4A853]/10 border border-[#D4A853]/30 text-[#D4A853] rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-[#D4A853]/20 hover:border-[#D4A853]/60 transition-all whitespace-nowrap"
+                >
+                  <Download size={13} />
+                  Télécharger Excel
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px] border-collapse" style={{ minWidth: `${Math.max(900, 500 + monthKeys.length * 90)}px` }}>
+                  <thead>
+                    <tr className="bg-[#0F0F0F]">
+                      <th className="sticky left-0 z-10 bg-[#0F0F0F] text-left px-4 py-3 text-[#D4A853] font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">N°</th>
+                      <th className="text-left px-4 py-3 text-[#D4A853] font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">Nom</th>
+                      <th className="text-left px-4 py-3 text-[#D4A853] font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">Prénom</th>
+                      <th className="text-left px-4 py-3 text-white/40 font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">N° Bip</th>
+                      <th className="text-right px-4 py-3 text-[#D4A853] font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">Adhésion HT</th>
+                      {monthKeys.map(key => (
+                        <th key={key} className="text-right px-3 py-3 text-white/40 font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap capitalize">{monthLabel(key)}</th>
+                      ))}
+                      <th className="text-right px-4 py-3 text-[#D4A853] font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">Total HT</th>
+                      <th className="text-right px-4 py-3 text-white/40 font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">TVA (20%)</th>
+                      <th className="text-right px-4 py-3 text-[#D4A853] font-bold uppercase tracking-widest border-b border-white/5 whitespace-nowrap">Total TTC</th>
+                      <th className="px-2 py-3 border-b border-white/5 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      type RecapRow = {
+                        key: string;
+                        slotNumber: number;
+                        isOwner: boolean;
+                        clientNom: string | null;
+                        clientPrenom: string | null;
+                        clientEmail: string;
+                        adhesion: number | null;
+                        hasLeft: boolean;
+                        invs: any[];
+                      };
+                      const rows: RecapRow[] = [];
+
+                      slots.forEach(slot => {
+                        const isOwner = slot.number === OWNER_SLOT;
+                        const slotInvs = invBySlot[slot.number] || [];
+
+                        if (isOwner) {
+                          rows.push({ key: `slot-${slot.number}`, slotNumber: slot.number, isOwner: true, clientNom: slot.nom, clientPrenom: slot.prenom, clientEmail: '', adhesion: null, hasLeft: false, invs: [] });
+                          return;
+                        }
+
+                        if (slotInvs.length === 0) {
+                          rows.push({ key: `slot-${slot.number}-empty`, slotNumber: slot.number, isOwner: false, clientNom: slot.status === 'occupé' ? slot.nom : null, clientPrenom: slot.status === 'occupé' ? slot.prenom : null, clientEmail: '', adhesion: null, hasLeft: false, invs: [] });
+                          return;
+                        }
+
+                        const byClient: Record<string, any[]> = {};
+                        slotInvs.forEach((inv: any) => {
+                          if (!byClient[inv.clientEmail]) byClient[inv.clientEmail] = [];
+                          byClient[inv.clientEmail].push(inv);
+                        });
+
+                        Object.entries(byClient).forEach(([email, clientInvs]) => {
+                          const ref = clientInvs[0];
+                          const firstInv = clientInvs.find((i: any) => i.isFirstMonth);
+                          const hasLeft = slot.status !== 'occupé' || slot.email !== email;
+                          rows.push({
+                            key: `slot-${slot.number}-${email}`,
+                            slotNumber: slot.number,
+                            isOwner: false,
+                            clientNom: ref.clientNom,
+                            clientPrenom: ref.clientPrenom,
+                            clientEmail: email,
+                            adhesion: firstInv?.adhesionAmount ?? null,
+                            hasLeft,
+                            invs: clientInvs,
+                          });
+                        });
+                      });
+
+                      // Helper BIP : cherche le N° bip du véhicule correspondant à la facture
+                      const getCarBip = (clientEmail: string, carModel?: string): string => {
+                        const u = users.find((usr: any) => usr.email === clientEmail);
+                        if (!u?.cars?.length) return '';
+                        if (carModel) {
+                          const car = u.cars.find((c: any) => c.model === carModel);
+                          if (car?.bipNumber) return car.bipNumber;
+                        }
+                        return u.cars[0]?.bipNumber ?? '';
+                      };
+
+                      // Helper : input inline générique
+                      const CellInput = ({ value, onChange, onSave, onCancel, width = 'w-20', autoFocus = false }: {
+                        value: string; onChange: (v: string) => void; onSave: () => void; onCancel: () => void; width?: string; autoFocus?: boolean;
+                      }) => (
+                        <input
+                          autoFocus={autoFocus}
+                          value={value}
+                          onChange={e => onChange(e.target.value)}
+                          onBlur={onSave}
+                          onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+                          className={`${width} bg-[#D4A853]/10 border border-[#D4A853]/50 rounded px-1.5 py-0.5 text-white/90 text-[10px] outline-none focus:border-[#D4A853] text-right`}
+                        />
+                      );
+
+                      const startEdit = (rowKey: string, field: string, value: string, row: RecapRow, inv?: any) => {
+                        setEditingCell({ rowKey, field, slotNumber: row.slotNumber, clientEmail: row.clientEmail, clientNom: row.clientNom, clientPrenom: row.clientPrenom, inv });
+                        setEditCellValue(value);
+                      };
+
+                      return rows.map((row, idx) => {
+                        const bg = idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : '#0A0A0A';
+                        const rowTotalHT = row.isOwner ? 0 : row.invs.reduce((s: number, inv: any) => s + mensuelNet(inv), 0);
+                        const rowTVA = parseFloat((rowTotalHT * 0.20).toFixed(2));
+                        const rowTTC = parseFloat((rowTotalHT * 1.20).toFixed(2));
+                        const isEditableRow = !row.isOwner && row.invs.length > 0;
+                        const ec = editingCell;
+
+                        return (
+                          <tr key={row.key} className="border-b border-white/[0.03] hover:bg-[#D4A853]/[0.03] transition-colors group">
+                            <td className="sticky left-0 z-10 px-4 py-2.5 font-black text-white/70 whitespace-nowrap" style={{ background: bg }}>
+                              #{row.slotNumber}
+                            </td>
+
+                            {/* NOM */}
+                            <td className="px-2 py-1.5 font-semibold whitespace-nowrap" style={{ background: bg }}>
+                              {row.isOwner
+                                ? <span className="text-[#D4A853]/60">{row.clientNom} (proprio)</span>
+                                : isEditableRow && ec?.rowKey === row.key && ec.field === 'nom'
+                                  ? <CellInput autoFocus value={editCellValue} onChange={setEditCellValue} onSave={handleSaveCell} onCancel={() => setEditingCell(null)} width="w-24" />
+                                  : row.clientNom
+                                    ? <span className={`text-white/60 ${isEditableRow ? 'cursor-pointer hover:text-white/90 hover:underline decoration-dotted decoration-[#D4A853]/40' : ''}`} onClick={() => isEditableRow && startEdit(row.key, 'nom', row.clientNom ?? '', row)}>{row.clientNom}{row.hasLeft ? <span className="ml-1.5 text-[8px] text-white/25 uppercase tracking-wider font-normal">(parti)</span> : ''}</span>
+                                    : <span className="text-white/15 italic">Disponible</span>}
+                            </td>
+
+                            {/* PRÉNOM */}
+                            <td className="px-2 py-1.5 font-semibold text-white/60 whitespace-nowrap">
+                              {isEditableRow && ec?.rowKey === row.key && ec.field === 'prenom'
+                                ? <CellInput autoFocus value={editCellValue} onChange={setEditCellValue} onSave={handleSaveCell} onCancel={() => setEditingCell(null)} width="w-20" />
+                                : <span className={`${isEditableRow ? 'cursor-pointer hover:text-white/90 hover:underline decoration-dotted decoration-[#D4A853]/40' : ''}`} onClick={() => isEditableRow && startEdit(row.key, 'prenom', row.clientPrenom ?? '', row)}>{row.clientPrenom ?? ''}</span>}
+                            </td>
+
+                            {/* BIP */}
+                            <td className="px-4 py-2.5 font-mono text-white/40 whitespace-nowrap text-[10px]">
+                              {(() => {
+                                const bip = !row.isOwner && row.clientEmail ? getCarBip(row.clientEmail, row.invs[0]?.carModel) : '';
+                                return bip ? <span>{bip}</span> : <span className="text-white/10">—</span>;
+                              })()}
+                            </td>
+
+                            {/* ADHÉSION */}
+                            <td className="px-2 py-1.5 text-right font-semibold whitespace-nowrap">
+                              {row.isOwner
+                                ? <span className="text-white/20">—</span>
+                                : (() => {
+                                    const firstInv = row.invs.find((i: any) => i.isFirstMonth);
+                                    if (!firstInv) return <span className="text-white/10">—</span>;
+                                    return ec?.rowKey === row.key && ec.field === 'adhesion'
+                                      ? <CellInput autoFocus value={editCellValue} onChange={setEditCellValue} onSave={handleSaveCell} onCancel={() => setEditingCell(null)} width="w-16" />
+                                      : <span className="text-[#D4A853]/80 cursor-pointer hover:text-[#D4A853] hover:underline decoration-dotted" onClick={() => startEdit(row.key, 'adhesion', String(firstInv.adhesionAmount ?? 200), row, firstInv)}>{(firstInv.adhesionAmount ?? 200).toFixed(2)} €</span>;
+                                  })()}
+                            </td>
+
+                            {/* MOIS */}
+                            {monthKeys.map(key => {
+                              const inv = row.invs.find((i: any) => i.periodStart.slice(0, 7) === key);
+                              const amt = row.isOwner ? null : (inv ? mensuelNet(inv) : null);
+                              const isCellEditing = ec?.rowKey === row.key && ec.field === key;
+                              return (
+                                <td key={key} className="px-2 py-1.5 text-right whitespace-nowrap">
+                                  {isCellEditing
+                                    ? <CellInput autoFocus value={editCellValue} onChange={setEditCellValue} onSave={handleSaveCell} onCancel={() => setEditingCell(null)} width="w-16" />
+                                    : amt !== null
+                                      ? <span className="text-white/55 cursor-pointer hover:text-white/90 hover:underline decoration-dotted decoration-[#D4A853]/40" onClick={() => startEdit(row.key, key, String(amt), row, inv)}>{(amt as number).toFixed(2)} €</span>
+                                      : <span className="text-white/10">—</span>}
+                                </td>
+                              );
+                            })}
+
+                            {/* TOTAUX */}
+                            <td className="px-4 py-2.5 text-right font-black whitespace-nowrap">
+                              {row.isOwner ? <span className="text-white/20">—</span> : rowTotalHT > 0 ? <span className="text-white/70">{rowTotalHT.toFixed(2)} €</span> : <span className="text-white/10">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-semibold whitespace-nowrap">
+                              {row.isOwner ? <span className="text-white/20">—</span> : rowTVA > 0 ? <span className="text-white/40">{rowTVA.toFixed(2)} €</span> : <span className="text-white/10">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-black whitespace-nowrap">
+                              {row.isOwner ? <span className="text-white/20">0,00 €</span> : rowTTC > 0 ? <span className="text-emerald-400/80">{rowTTC.toFixed(2)} €</span> : <span className="text-white/10">—</span>}
+                            </td>
+
+                            {/* SUPPRIMER LIGNE */}
+                            <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                              {isEditableRow && (
+                                <button
+                                  onClick={() => handleDeleteRecapRow(row.slotNumber, row.clientEmail, row.clientNom ?? '', row.clientPrenom ?? '')}
+                                  title="Supprimer toutes les factures de ce client pour cette place"
+                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 bg-red-500/10 text-red-400/70 rounded flex items-center justify-center hover:bg-red-500/30 hover:text-red-400 transition-all"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                  <tfoot>
+                    <tr><td colSpan={colSpanTotal + 4} className="py-1 border-t border-[#D4A853]/20" /></tr>
+                    <tr className="bg-white/[0.02]">
+                      <td colSpan={5} className="sticky left-0 z-10 px-4 py-3 font-black text-white/50 uppercase tracking-widest text-[9px]" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        Totaux <span className="text-white/20 font-normal normal-case">(hors adhésion)</span>
+                      </td>
+                      {monthKeys.map(key => {
+                        const monthTotal = invoices
+                          .filter((inv: any) => inv.periodStart.slice(0, 7) === key && inv.slotNumber !== OWNER_SLOT)
+                          .reduce((s: number, inv: any) => s + mensuelNet(inv), 0);
+                        return <td key={key} className="px-3 py-3 text-right font-bold text-white/40 whitespace-nowrap">{monthTotal.toFixed(2)} €</td>;
+                      })}
+                      <td className="px-4 py-3 text-right font-black text-white whitespace-nowrap">{grandTotalHT.toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-right font-bold text-white/50 whitespace-nowrap">{grandTVA.toFixed(2)} €</td>
+                      <td className="px-4 py-3 text-right font-black text-[#D4A853] text-sm whitespace-nowrap">{grandTTC.toFixed(2)} €</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          );
+        })()
+        ) : activeTab === 'clients' ? (
+        /* SECTION CLIENTS */
+        <div className="rounded-[2rem] border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          {/* En-tête */}
+          <div className="p-6 border-b border-white/5 bg-white/[0.01] flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+            <div>
+              <h2 className="text-xl font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Gestion des <span className="text-[#D4A853]">Clients</span></h2>
+              <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">{users.filter((u: any) => u.role !== 'admin').length} client(s) enregistré(s)</p>
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
+              <input
+                type="text"
+                value={clientSearch}
+                onChange={e => setClientSearch(e.target.value)}
+                placeholder="Rechercher un client..."
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder:text-white/20 outline-none focus:border-[#D4A853]/30"
+              />
+            </div>
+          </div>
+
+          {/* Liste clients */}
+          <div className="divide-y divide-white/[0.04]">
+            {users
+              .filter((u: any) => u.role !== 'admin')
+              .filter((u: any) => {
+                const q = clientSearch.toLowerCase();
+                return !q || u.nom?.toLowerCase().includes(q) || u.prenom?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
+              })
+              .map((u: any) => {
+                const assignedSlot = slots.find(s => s.email === u.email && s.status === 'occupé');
+                const userInvoices = invoices.filter((inv: any) => inv.clientEmail === u.email);
+                const totalFacturé = userInvoices.reduce((sum: number, inv: any) => sum + inv.amount, 0);
+                const initials = `${u.prenom?.[0] ?? ''}${u.nom?.[0] ?? ''}`.toUpperCase();
+                const memberSince = u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : null;
+
+                return (
+                  <div key={u._id} className="p-5 sm:p-6 hover:bg-white/[0.02] transition-colors">
+                    <div className="flex flex-col sm:flex-row gap-5">
+                      {/* Avatar + identité */}
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        <div className="h-12 w-12 rounded-2xl flex items-center justify-center text-sm font-black shrink-0 border border-[#D4A853]/20" style={{ background: 'linear-gradient(135deg, rgba(212,168,83,0.15), rgba(212,168,83,0.05))' }}>
+                          <span className="text-[#D4A853]">{initials}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-black text-white/90">{u.prenom} {u.nom}</p>
+                            {assignedSlot && (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20">
+                                Place #{assignedSlot.number}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Mail size={10} className="text-white/20 shrink-0" />
+                            <p className="text-[11px] text-white/40 truncate">{u.email}</p>
+                          </div>
+                          {memberSince && (
+                            <p className="text-[9px] text-white/20 uppercase tracking-widest mt-1">Membre depuis le {memberSince}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Véhicules */}
+                      <div className="sm:w-56 shrink-0">
+                        <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-2">
+                          <Car size={9} className="inline mr-1 -mt-0.5" />Véhicule(s)
+                        </p>
+                        {u.cars && u.cars.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {u.cars.map((car: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="text-[10px] font-semibold text-white/60">{car.model}</span>
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest bg-white/5 text-white/30 border border-white/10">{car.plate}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-white/15 italic">Aucun véhicule</p>
+                        )}
+                      </div>
+
+                      {/* Stats factures */}
+                      <div className="sm:w-44 shrink-0">
+                        <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-2">
+                          <CreditCard size={9} className="inline mr-1 -mt-0.5" />Facturation
+                        </p>
+                        <p className="text-sm font-black text-[#D4A853]">{(totalFacturé * 1.20).toFixed(2)} €</p>
+                        <p className="text-[9px] text-white/20 mt-0.5">TTC ({totalFacturé.toFixed(2)} € HT)</p>
+                        <p className="text-[9px] text-white/30 mt-1">{userInvoices.length} facture(s)</p>
+                      </div>
+
+                      {/* Slot détail (si assigné) */}
+                      {assignedSlot && (
+                        <div className="sm:w-44 shrink-0">
+                          <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-2">
+                            <ParkingCircle size={9} className="inline mr-1 -mt-0.5" />Emplacement
+                          </p>
+                          <p className="text-[11px] font-bold text-white/70">Place #{assignedSlot.number}</p>
+                          <p className="text-[10px] text-white/40 mt-0.5">{assignedSlot.carModel}</p>
+                          <p className="text-[9px] text-white/20 mt-0.5 uppercase tracking-wider">{assignedSlot.licensePlate}</p>
+                          <p className="text-[9px] text-white/20 mt-1">Depuis le {assignedSlot.startDate}</p>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex sm:flex-col items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => openEditClient(u)}
+                          title="Modifier le client"
+                          className="h-9 w-9 bg-white/5 text-[#D4A853]/60 rounded-xl flex items-center justify-center hover:bg-[#D4A853]/20 hover:text-[#D4A853] transition-all border border-white/10 hover:border-[#D4A853]/30 cursor-pointer"
+                        >
+                          <UserCircle size={14} />
+                        </button>
+                        <button
+                          onClick={() => setExpandedClientId(expandedClientId === u._id ? null : u._id)}
+                          title="Voir les factures"
+                          className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all border cursor-pointer ${expandedClientId === u._id ? 'bg-[#D4A853]/20 text-[#D4A853] border-[#D4A853]/30' : 'bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/70'}`}
+                        >
+                          <Receipt size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(u._id, u.nom, u.prenom)}
+                          title="Supprimer le client"
+                          className="h-9 w-9 bg-white/5 text-red-400/60 rounded-xl flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-all border border-white/10 hover:border-red-500/30 cursor-pointer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Factures dépliables */}
+                    {expandedClientId === u._id && (
+                      <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest">
+                            <Receipt size={9} className="inline mr-1 -mt-0.5" />
+                            {userInvoices.length} facture(s)
+                          </p>
+                          <ChevronDown size={12} className="text-white/20 rotate-180" />
+                        </div>
+                        {userInvoices.length === 0 ? (
+                          <p className="text-[10px] text-white/15 italic">Aucune facture</p>
+                        ) : (
+                          <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                            {[...userInvoices]
+                              .sort((a: any, b: any) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+                              .map((inv: any) => (
+                                <div key={inv._id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:border-white/[0.08] transition-colors">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[10px] font-bold text-white/70 font-mono">{inv.invoiceNumber}</span>
+                                      {inv.carModel && (
+                                        <span className="text-[9px] text-white/30 truncate">{inv.carModel}</span>
+                                      )}
+                                      {inv.isFirstMonth && (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-[#D4A853]/10 text-[#D4A853]/60 border border-[#D4A853]/20">1er mois</span>
+                                      )}
+                                    </div>
+                                    <p className="text-[9px] text-white/25 mt-0.5">
+                                      {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('fr-FR') : '—'}
+                                      {' · '}
+                                      <span className="text-[#D4A853]/60 font-semibold">{(inv.amount * 1.20).toFixed(2)} € TTC</span>
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => generateInvoicePDF({ ...inv, mandat: u.mandat, immeuble: u.immeuble })}
+                                    title="Télécharger le PDF"
+                                    className="h-7 w-7 shrink-0 bg-white/5 text-white/30 rounded-lg flex items-center justify-center hover:bg-[#D4A853]/20 hover:text-[#D4A853] transition-all border border-white/10"
+                                  >
+                                    <Download size={11} />
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            {users.filter((u: any) => u.role !== 'admin').filter((u: any) => {
+              const q = clientSearch.toLowerCase();
+              return !q || u.nom?.toLowerCase().includes(q) || u.prenom?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
+            }).length === 0 && (
+              <div className="p-16 text-center text-white/15">
+                <UserCircle size={32} className="mx-auto mb-4 opacity-30" />
+                <p className="font-semibold uppercase text-[10px] tracking-[0.2em]">Aucun client trouvé</p>
+              </div>
+            )}
+          </div>
         </div>
         ) : (
         /* SECTION MESSAGERIE ADMIN */
@@ -920,6 +1644,99 @@ const AdminDashboard = () => {
         )}
       </div>
     </div>
+
+    {/* MODAL MODIFIER CLIENT */}
+    {editingClientUser && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setEditingClientUser(null); }}>
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+        <div className="relative w-full max-w-md rounded-[2rem] border border-white/10 p-6 space-y-5" style={{ background: 'linear-gradient(160deg, #1A1A1A, #111)' }}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Modifier <span className="text-[#D4A853]">{editingClientUser.prenom} {editingClientUser.nom}</span>
+            </h3>
+            <button onClick={() => setEditingClientUser(null)} className="h-8 w-8 bg-white/5 rounded-xl flex items-center justify-center text-white/40 hover:text-white/80 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Nom</p>
+              <input value={editClientForm.nom} onChange={e => setEditClientForm(f => ({ ...f, nom: e.target.value }))} className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40" />
+            </div>
+            <div>
+              <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Prénom</p>
+              <input value={editClientForm.prenom} onChange={e => setEditClientForm(f => ({ ...f, prenom: e.target.value }))} className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40" />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest">Véhicule(s)</p>
+              <button
+                onClick={() => setEditClientForm({ ...editClientForm, cars: [...editClientForm.cars, { model: '', plate: '', bipNumber: '' }] })}
+                className="text-[9px] font-bold text-[#D4A853]/60 uppercase tracking-widest hover:text-[#D4A853] transition-colors"
+              >+ Ajouter</button>
+            </div>
+            {editClientForm.cars.length === 0 && (
+              <p className="text-[10px] text-white/15 italic">Aucun véhicule</p>
+            )}
+            <div className="space-y-2">
+              {editClientForm.cars.map((car, i) => (
+                <div key={i} className="space-y-1.5 p-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02]">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={car.model}
+                      onChange={e => setEditClientForm(f => ({ ...f, cars: f.cars.map((c, j) => j === i ? { ...c, model: e.target.value } : c) }))}
+                      placeholder="Modèle (ex: Renault Clio)"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15"
+                    />
+                    <button
+                      onClick={() => setEditClientForm({ ...editClientForm, cars: editClientForm.cars.filter((_, j) => j !== i) })}
+                      className="h-7 w-7 shrink-0 bg-white/5 text-red-400/50 rounded-lg flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-all border border-white/10"
+                    ><X size={10} /></button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={car.plate}
+                      onChange={e => setEditClientForm(f => ({ ...f, cars: f.cars.map((c, j) => j === i ? { ...c, plate: e.target.value.toUpperCase() } : c) }))}
+                      placeholder="AA-000-AA"
+                      className="w-28 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15 font-mono uppercase"
+                    />
+                    <input
+                      value={car.bipNumber}
+                      onChange={e => setEditClientForm(f => ({ ...f, cars: f.cars.map((c, j) => j === i ? { ...c, bipNumber: e.target.value } : c) }))}
+                      placeholder="N° Bip"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15 font-mono"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Mandat (facture)</p>
+            <input value={editClientForm.mandat} onChange={e => setEditClientForm(f => ({ ...f, mandat: e.target.value }))} placeholder="SFERE BM SERVICES" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/20" />
+          </div>
+
+          <div>
+            <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Immeuble (facture)</p>
+            <input value={editClientForm.immeuble} onChange={e => setEditClientForm(f => ({ ...f, immeuble: e.target.value }))} placeholder="Immeuble : 41 Rue Corneille - 31100 Toulouse" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/20" />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setEditingClientUser(null)} className="flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 transition-all">
+              Annuler
+            </button>
+            <button onClick={handleSaveClientEdit} className="flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest gold-gradient text-[#0A0A0A] hover:shadow-lg hover:shadow-amber-900/20 transition-all">
+              Sauvegarder
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

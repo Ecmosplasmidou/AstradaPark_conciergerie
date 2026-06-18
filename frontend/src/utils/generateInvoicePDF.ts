@@ -14,6 +14,10 @@ interface InvoiceData {
   createdAt?: string;
   isFirstMonth?: boolean;
   adhesionAmount?: number;
+  mensuelAmount?: number;
+  cautionAmount?: number;
+  mandat?: string;
+  immeuble?: string;
 }
 
 export function generateInvoicePDF(invoice: InvoiceData): void {
@@ -24,13 +28,14 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   // CALCULS DES MONTANTS ET LIGNES DE FACTURE
   // ═══════════════════════════════════════════
   const ADHESION_HT = invoice.adhesionAmount ?? 200;
-  const CAUTION_HT = 240;
+  const CAUTION_HT = invoice.cautionAmount ?? 240;
+  const MENSUEL_FULL = invoice.mensuelAmount ?? 240;
   const tvaRate = 0.2;
 
   const isFirstMonth = invoice.isFirstMonth === true;
 
-  // Prorata temporis : nombre de jours × 8 € (tarif = 240 € / 30j)
-  const DAILY_RATE = 8;
+  // Prorata temporis : nombre de jours × tarif journalier (mensuelAmount / 30)
+  const DAILY_RATE = parseFloat((MENSUEL_FULL / 30).toFixed(4));
   const [sy, sm, sd] = invoice.periodStart.split("-").map(Number);
   const [ey, em, ed] = invoice.periodEnd.split("-").map(Number);
   const startLocal = new Date(sy, sm - 1, sd);
@@ -50,7 +55,11 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
 
   const invoiceLines: InvoiceLine[] = isFirstMonth
     ? [
-        { description: ADHESION_HT === 0 ? "Adhésion club (offerte)" : "Adhésion club", montant: ADHESION_HT },
+        {
+          description:
+            ADHESION_HT === 0 ? "Adhésion club (offerte)" : "Adhésion club",
+          montant: ADHESION_HT,
+        },
         { description: mensuelDesc, montant: mensuelHT },
         { description: "Caution : 1 mois de loyer", montant: CAUTION_HT },
       ]
@@ -171,18 +180,18 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.setFontSize(8);
   doc.setTextColor(...gold);
   doc.setFont("helvetica", "bold");
-  doc.text("BIEN & MANDAT", pageWidth - 90, yClient);
+  doc.text("CLIENT & MANDAT", pageWidth - 90, yClient);
 
   yClient += 6;
   doc.setFontSize(9);
   doc.setTextColor(...dark);
   doc.setFont("helvetica", "bold");
-  doc.text("Mandat : SFERE BM SERVICES", pageWidth - 90, yClient);
+  doc.text(invoice.mandat ?? 'ASTRADA PARK GESTION', pageWidth - 90, yClient);
   yClient += 4.5;
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...grey);
   doc.text(
-    "Immeuble : 41 Rue Corneille - 31100 Toulouse",
+    invoice.immeuble ?? "Parking Hippodrome — Route de Toulouse, 31320 Castanet-Tolosan",
     pageWidth - 90,
     yClient,
   );
@@ -314,6 +323,28 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   });
 
   // ═══════════════════════════════════════════
+  // CONDITIONS DE PAIEMENT (à gauche du total)
+  // ═══════════════════════════════════════════
+  const condBoxX = 20;
+  const condBoxW = pageWidth - 95 - 20;
+  const condBoxH = currentTotalY + 8 - totalY;
+  doc.setDrawColor(...gold);
+  doc.setLineWidth(0.4);
+  doc.rect(condBoxX, totalY, condBoxW, condBoxH);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...gold);
+  doc.text("CONDITIONS DE PAIEMENT", condBoxX + 4, totalY + 6);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...dark);
+  const condLines = doc.splitTextToSize(
+    "Payable par terme mensuel et d'avance le premier jour du mois",
+    condBoxW - 8,
+  );
+  doc.text(condLines, condBoxX + 4, totalY + 12);
+
+  // ═══════════════════════════════════════════
   // AVIS / DEMANDE DE PAIEMENT
   // ═══════════════════════════════════════════
   const noteY = currentTotalY + 15;
@@ -340,9 +371,23 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   doc.text(splitNote, 26, noteY + 7);
 
   // ═══════════════════════════════════════════
+  // CLAUSE LÉGALE
+  // ═══════════════════════════════════════════
+  const clauseY = noteY + boxHeight + 3;
+  const clauseText =
+    "CLAUSE DE RÉSERVE DE PROPRIÉTÉ : Conformément à la loi 80.335 du 12 mai 1980, nous réservons la propriété des produits et marchandises, objets des présents débits, jusqu'au paiement de l'intégralité du prix et de ses accessoires. En cas de non paiement total ou partiel du prix de l'échéance pour quelque cause que ce soit, de convention expresse, nous nous réservons la faculté, sans formalités, de reprendre matériellement possession de ces produits ou marchandises à vos frais, risques et périls. " +
+    "Pénalité de retard : 3 fois le taux d'intérêt légal après date échéance. Escompte pour règlement anticipé : 0% (sauf condition particulière définie dans les conditions de règlement). " +
+    "Le montant de l'indemnité forfaitaire pour frais de recouvrement prévue en douzième alinéa de l'article L441-6 est fixé à 40 Euros en matière commercial.";
+  doc.setFontSize(5.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(130, 130, 130);
+  const splitClause = doc.splitTextToSize(clauseText, pageWidth - 40);
+  doc.text(splitClause, 20, clauseY);
+
+  // ═══════════════════════════════════════════
   // PIED DE PAGE
   // ═══════════════════════════════════════════
-  const footerY = 260;
+  const footerY = 248;
 
   doc.setDrawColor(...lightGrey);
   doc.setLineWidth(0.2);
@@ -357,6 +402,74 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
     footerY + 6,
     { align: "center" },
   );
+  // IBAN : label normal + valeur bold, centrés ensemble
+  const ibanLabel = "IBAN : ";
+  const ibanValue = "FR76 3000 3043 1600 0201 7261 087";
+  const ibanLabelW = doc.getTextWidth(ibanLabel);
+  const ibanValueW = doc.getTextWidth(ibanValue);
+  const ibanTotalW = ibanLabelW + ibanValueW;
+  const ibanStartX = (pageWidth - ibanTotalW) / 2;
+  doc.setFont("helvetica", "normal");
+  doc.text(ibanLabel, ibanStartX, footerY + 11);
+  doc.setFont("helvetica", "bold");
+  doc.text(ibanValue, ibanStartX + ibanLabelW, footerY + 11);
+
+  // BIC : label normal + valeur bold, centrés ensemble
+  const bicLabel = "BIC-ADRESSE SWIFT : ";
+  const bicValue = "SOGEFRPP";
+  doc.setFont("helvetica", "normal");
+  const bicLabelW = doc.getTextWidth(bicLabel);
+  const bicValueW = doc.getTextWidth(bicValue);
+  const bicTotalW = bicLabelW + bicValueW;
+  const bicStartX = (pageWidth - bicTotalW) / 2;
+  doc.text(bicLabel, bicStartX, footerY + 16);
+  doc.setFont("helvetica", "bold");
+  doc.text(bicValue, bicStartX + bicLabelW, footerY + 16);
+
+  // Tableau RIB
+  const ribY = footerY + 22;
+  const ribHeaders = ["Code banque", "Code guichet", "N° compte", "Clé RIB"];
+  const ribValues  = ["30003",       "04316",        "00020172610", "87"];
+  const colCount = 4;
+  const tableW = pageWidth - 40;
+  const colW = tableW / colCount;
+  const rowH = 6;
+  const startX = 20;
+
+  // Ligne d'en-tête
+  doc.setFillColor(230, 230, 230);
+  doc.rect(startX, ribY, tableW, rowH, "F");
+  doc.setDrawColor(...lightGrey);
+  doc.setLineWidth(0.2);
+  doc.rect(startX, ribY, tableW, rowH);
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...dark);
+  ribHeaders.forEach((h, i) => {
+    const cx = startX + i * colW + colW / 2;
+    if (i > 0) {
+      doc.setDrawColor(...lightGrey);
+      doc.line(startX + i * colW, ribY, startX + i * colW, ribY + rowH);
+    }
+    doc.text(h, cx, ribY + rowH - 1.5, { align: "center" });
+  });
+
+  // Ligne de valeurs
+  const valY = ribY + rowH;
+  doc.setFillColor(248, 248, 248);
+  doc.rect(startX, valY, tableW, rowH, "F");
+  doc.setDrawColor(...lightGrey);
+  doc.rect(startX, valY, tableW, rowH);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...grey);
+  ribValues.forEach((v, i) => {
+    const cx = startX + i * colW + colW / 2;
+    if (i > 0) {
+      doc.setDrawColor(...lightGrey);
+      doc.line(startX + i * colW, valY, startX + i * colW, valY + rowH);
+    }
+    doc.text(v, cx, valY + rowH - 1.5, { align: "center" });
+  });
 
   // Bandeau inférieur doré
   doc.setFillColor(...gold);
@@ -365,7 +478,11 @@ export function generateInvoicePDF(invoice: InvoiceData): void {
   // ═══════════════════════════════════════════
   // TÉLÉCHARGEMENT
   // ═══════════════════════════════════════════
-  doc.save(`${invoice.invoiceNumber}.pdf`);
+  const dateStr = invoice.createdAt
+    ? new Date(invoice.createdAt).toLocaleDateString("fr-FR").replace(/\//g, "-")
+    : new Date().toLocaleDateString("fr-FR").replace(/\//g, "-");
+  const fileName = `FACTURE_${dateStr}_${invoice.clientNom.toUpperCase()}_${invoice.clientPrenom.toUpperCase()}.pdf`;
+  doc.save(fileName);
 }
 
 function formatDateFR(dateStr: string): string {

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Patch, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Delete, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -26,5 +26,20 @@ export class AuthController {
   @Get('users')
   async getAllUsers() {
     return this.authService.findAllUsers();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Patch('users/:id')
+  async updateUser(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    if (req.user.role !== 'admin') throw new ForbiddenException();
+    return this.authService.updateUserById(id, body);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete('users/:id')
+  async deleteUser(@Param('id') id: string, @Req() req: any) {
+    if (req.user.role !== 'admin') throw new ForbiddenException();
+    await this.authService.deleteUser(id);
+    return { message: 'Client supprimé' };
   }
 }

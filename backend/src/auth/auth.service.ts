@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User } from './schemas/user.schema';
@@ -86,5 +86,19 @@ export class AuthService {
 
   async findAllUsers(): Promise<User[]> {
     return this.userModel.find().select('-password').exec();
+  }
+
+  async updateUserById(id: string, data: any): Promise<User> {
+    delete data.role;
+    delete data.password;
+    const updated = await this.userModel.findByIdAndUpdate(id, { $set: data }, { new: true }).select('-password').exec();
+    if (!updated) throw new NotFoundException('Utilisateur non trouvé');
+    return updated;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    const user = await this.userModel.findById(id).exec();
+    if (user?.role === 'admin') throw new ForbiddenException('Impossible de supprimer un administrateur');
+    await this.userModel.findByIdAndDelete(id).exec();
   }
 }

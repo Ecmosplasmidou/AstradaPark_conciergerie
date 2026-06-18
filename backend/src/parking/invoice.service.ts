@@ -94,11 +94,14 @@ export class InvoiceService {
     const startLocal = new Date(sy, sm - 1, sd);
     const endLocal = new Date(ey, em - 1, ed);
     const daysInPeriod = Math.round((endLocal.getTime() - startLocal.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const mensuelHT = parseFloat((daysInPeriod * 8).toFixed(2));
+    const mensuelAmount = slot.mensuelAmount ?? 240;
+    const dailyRate = parseFloat((mensuelAmount / 30).toFixed(4));
+    const mensuelHT = parseFloat((daysInPeriod * dailyRate).toFixed(2));
 
-    // Premier mois : adhésion 200 + mensuel (prorata) + caution 240
+    // Premier mois : adhésion + mensuel (prorata) + caution
     const adhesionAmount = slot.adhesionAmount ?? 200;
-    const FIRST_MONTH_AMOUNT = parseFloat((adhesionAmount + mensuelHT + 240).toFixed(2));
+    const cautionAmount = slot.cautionAmount ?? 240;
+    const FIRST_MONTH_AMOUNT = parseFloat((adhesionAmount + mensuelHT + cautionAmount).toFixed(2));
     const invoiceNumber = await this.generateInvoiceNumber();
 
     const invoice = new this.invoiceModel({
@@ -114,10 +117,12 @@ export class InvoiceService {
       type: 'mensuel',
       isFirstMonth: true,
       adhesionAmount,
+      mensuelAmount,
+      cautionAmount,
     });
 
     const saved = await invoice.save();
-    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${FIRST_MONTH_AMOUNT}€ HT (adhésion + mensuel ${daysInPeriod}j×8€ + caution)`);
+    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${FIRST_MONTH_AMOUNT}€ HT (adhésion ${adhesionAmount} + mensuel ${daysInPeriod}j×${dailyRate.toFixed(2)}€ + caution ${cautionAmount})`);
     return saved;
   }
 
@@ -179,7 +184,7 @@ export class InvoiceService {
           periodEnd = lastDay;
         }
 
-        const MENSUEL_AMOUNT = 240;
+        const mensuelAmount = slot.mensuelAmount ?? 240;
         const invoiceNumber = await this.generateInvoiceNumber();
 
         await this.invoiceModel.create({
@@ -189,14 +194,15 @@ export class InvoiceService {
           clientEmail: slot.email,
           slotNumber: slot.number,
           carModel: slot.carModel || '',
-          amount: MENSUEL_AMOUNT,
+          amount: mensuelAmount,
           periodStart: firstDay,
           periodEnd,
           type: 'mensuel',
           isFirstMonth: false,
+          mensuelAmount,
         });
 
-        this.logger.log(`Facture mensuelle ${invoiceNumber} créée pour ${slot.email} — du ${firstDay} au ${periodEnd} — ${MENSUEL_AMOUNT}€ HT`);
+        this.logger.log(`Facture mensuelle ${invoiceNumber} créée pour ${slot.email} — du ${firstDay} au ${periodEnd} — ${mensuelAmount}€ HT`);
       } catch (error) {
         this.logger.error(`Erreur facture place #${slot.number}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -217,6 +223,32 @@ export class InvoiceService {
    */
   async getAllInvoices(): Promise<Invoice[]> {
     return this.invoiceModel.find().sort({ createdAt: -1 }).exec();
+  }
+
+  /**
+   * Met à jour le nom/prénom du client sur toutes ses factures pour un slot donné
+   */
+  async updateClientName(slotNumber: number, clientEmail: string, clientNom: string, clientPrenom: string): Promise<number> {
+    const result = await this.invoiceModel.updateMany(
+      { slotNumber, clientEmail },
+      { $set: { clientNom, clientPrenom } },
+    ).exec();
+    return result.modifiedCount;
+  }
+
+  /**
+   * Met à jour le montant et/ou l'adhésion d'une facture
+   */
+  async updateInvoice(id: string, update: { amount?: number; adhesionAmount?: number }): Promise<void> {
+    await this.invoiceModel.findByIdAndUpdate(id, { $set: update }).exec();
+  }
+
+  /**
+   * Supprime toutes les factures d'un client pour une place donnée
+   */
+  async deleteInvoicesByClient(slotNumber: number, clientEmail: string): Promise<number> {
+    const result = await this.invoiceModel.deleteMany({ slotNumber, clientEmail }).exec();
+    return result.deletedCount;
   }
 
   /**

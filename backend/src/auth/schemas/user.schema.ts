@@ -20,9 +20,16 @@ export class User extends Document {
 
   @Prop([{
     model: { type: String, required: true },
-    plate: { type: String, required: true }
+    plate: { type: String, required: true },
+    bipNumber: { type: String }
   }])
-  cars: { model: string; plate: string }[];
+  cars: { model: string; plate: string; bipNumber?: string }[];
+
+  @Prop()
+  mandat?: string;
+
+  @Prop()
+  immeuble?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

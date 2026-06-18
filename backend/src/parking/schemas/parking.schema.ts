@@ -35,6 +35,12 @@ export class ParkingSlot extends Document {
 
   @Prop({ default: 200 })
   adhesionAmount?: number;
+
+  @Prop({ default: 240 })
+  mensuelAmount?: number;
+
+  @Prop({ default: 240 })
+  cautionAmount?: number;
 }
 
 export const ParkingSlotSchema = SchemaFactory.createForClass(ParkingSlot);
