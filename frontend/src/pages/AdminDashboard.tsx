@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download, MessageSquare, CheckCircle2, Send, Filter, Calendar as CalendarIcon, Trash2, Table2, UserCircle, Mail, CreditCard, ChevronDown } from 'lucide-react';
+import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download, MessageSquare, CheckCircle2, Send, Filter, Calendar as CalendarIcon, Trash2, Table2, UserCircle, Mail, CreditCard, ChevronDown, UserPlus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
@@ -38,6 +38,10 @@ const AdminDashboard = () => {
   // État édition client (modal) + expansion factures
   const [editingClientUser, setEditingClientUser] = useState<any | null>(null);
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+
+  // État ajout client
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [addClientForm, setAddClientForm] = useState({ nom: '', prenom: '', email: '', password: '', cars: [] as { model: string; plate: string; bipNumber: string }[] });
   const [editClientForm, setEditClientForm] = useState<{ nom: string; prenom: string; mandat: string; immeuble: string; cars: { model: string; plate: string; bipNumber: string }[] }>({ nom: '', prenom: '', mandat: '', immeuble: '', cars: [] });
 
   // État édition inline récap (cellule par cellule)
@@ -258,6 +262,46 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleExportInvoiceCSV = (inv: any) => {
+    const ht = Number(inv.amount ?? 0);
+    const tva = parseFloat((ht * 0.20).toFixed(2));
+    const ttc = parseFloat((ht * 1.20).toFixed(2));
+    const headers = [
+      'N° Facture', 'Nom', 'Prénom', 'Email', 'Place', 'Véhicule', 'Plaque',
+      'Période début', 'Période fin', 'Type', 'Premier mois',
+      'Montant HT (€)', 'TVA 20% (€)', 'Montant TTC (€)',
+      'Adhésion HT (€)', 'Caution HT (€)', 'Mensuel HT (€)',
+    ];
+    const row = [
+      inv.invoiceNumber ?? '',
+      inv.clientNom ?? '',
+      inv.clientPrenom ?? '',
+      inv.clientEmail ?? '',
+      inv.slotNumber ?? '',
+      inv.carModel ?? '',
+      inv.licensePlate ?? '',
+      inv.periodStart ?? '',
+      inv.periodEnd ?? '',
+      inv.type ?? '',
+      inv.isFirstMonth ? 'Oui' : 'Non',
+      ht.toFixed(2),
+      tva.toFixed(2),
+      ttc.toFixed(2),
+      (inv.adhesionAmount ?? '').toString(),
+      (inv.cautionAmount ?? '').toString(),
+      (inv.mensuelAmount ?? '').toString(),
+    ];
+    const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [headers, row].map(r => r.map(escape).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${inv.invoiceNumber ?? 'facture'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportRecapExcel = () => {
     const OWNER_SLOT = 30;
     const mensuelNet = (inv: any) => inv.isFirstMonth
@@ -336,6 +380,21 @@ const AdminDashboard = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Récap Annuel');
     const year = new Date().getFullYear();
     XLSX.writeFile(wb, `recap-astrada-${year}.xlsx`);
+  };
+
+  const handleAddClient = async () => {
+    if (!addClientForm.nom || !addClientForm.prenom || !addClientForm.email || !addClientForm.password) {
+      alert('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+    try {
+      await api.post('/auth/signup', addClientForm);
+      setShowAddClientModal(false);
+      setAddClientForm({ nom: '', prenom: '', email: '', password: '', cars: [] });
+      fetchData();
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? 'Erreur lors de la création du client');
+    }
   };
 
   const handleDeleteUser = async (id: string, nom: string, prenom: string) => {
@@ -494,6 +553,12 @@ const AdminDashboard = () => {
                 {messages.filter(m => m.status === 'nouveau').length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setShowAddClientModal(true)}
+            className="ml-auto px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 bg-white/5 text-white/50 hover:text-white/80 border border-white/10 hover:border-[#D4A853]/30 hover:bg-[#D4A853]/10"
+          >
+            <UserPlus size={13} />Ajouter un client
           </button>
         </div>
 
@@ -918,10 +983,17 @@ const AdminDashboard = () => {
                       </div>
                       <button
                         onClick={() => { const u = users.find((u: any) => u.email === inv.clientEmail); generateInvoicePDF({ ...inv, mandat: u?.mandat, immeuble: u?.immeuble }); }}
-                        title="Télécharger la facture"
+                        title="Télécharger PDF"
                         className="h-9 w-9 bg-white/5 text-[#D4A853] rounded-lg flex items-center justify-center hover:bg-[#D4A853] hover:text-[#0A0A0A] transition-all border border-white/10 hover:border-[#D4A853] cursor-pointer"
                       >
                         <Download size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleExportInvoiceCSV(inv)}
+                        title="Télécharger CSV"
+                        className="h-9 px-2.5 bg-white/5 text-white/40 rounded-lg flex items-center justify-center gap-1 hover:bg-white/10 hover:text-white/70 transition-all border border-white/10 cursor-pointer text-[9px] font-bold uppercase tracking-tight"
+                      >
+                        CSV
                       </button>
                       {inv.isFirstMonth && (
                         <button
@@ -1243,6 +1315,13 @@ const AdminDashboard = () => {
               <h2 className="text-xl font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Gestion des <span className="text-[#D4A853]">Clients</span></h2>
               <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">{users.filter((u: any) => u.role !== 'admin').length} client(s) enregistré(s)</p>
             </div>
+            <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowAddClientModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/50 hover:text-white/80 hover:border-[#D4A853]/30 hover:bg-[#D4A853]/10 transition-all text-[10px] font-bold uppercase tracking-widest whitespace-nowrap"
+            >
+              <UserPlus size={13} />Ajouter un client
+            </button>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
               <input
@@ -1252,6 +1331,7 @@ const AdminDashboard = () => {
                 placeholder="Rechercher un client..."
                 className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder:text-white/20 outline-none focus:border-[#D4A853]/30"
               />
+            </div>
             </div>
           </div>
 
@@ -1731,6 +1811,98 @@ const AdminDashboard = () => {
             </button>
             <button onClick={handleSaveClientEdit} className="flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest gold-gradient text-[#0A0A0A] hover:shadow-lg hover:shadow-amber-900/20 transition-all">
               Sauvegarder
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* MODAL AJOUTER CLIENT */}
+    {showAddClientModal && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setShowAddClientModal(false); }}>
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+        <div className="relative w-full max-w-md rounded-[2rem] border border-white/10 p-6 space-y-4 max-h-[90vh] overflow-y-auto" style={{ background: 'linear-gradient(160deg, #1A1A1A, #111)' }}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Nouveau <span className="text-[#D4A853]">Client</span>
+            </h3>
+            <button onClick={() => setShowAddClientModal(false)} className="h-8 w-8 bg-white/5 rounded-xl flex items-center justify-center text-white/40 hover:text-white/80 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Nom *</p>
+              <input value={addClientForm.nom} onChange={e => setAddClientForm(f => ({ ...f, nom: e.target.value }))} placeholder="Dupont" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15" />
+            </div>
+            <div>
+              <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Prénom *</p>
+              <input value={addClientForm.prenom} onChange={e => setAddClientForm(f => ({ ...f, prenom: e.target.value }))} placeholder="Jean" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15" />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Email *</p>
+            <input type="email" value={addClientForm.email} onChange={e => setAddClientForm(f => ({ ...f, email: e.target.value }))} placeholder="jean.dupont@email.com" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15" />
+          </div>
+
+          <div>
+            <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Mot de passe *</p>
+            <input type="password" value={addClientForm.password} onChange={e => setAddClientForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15" />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest">Véhicule(s)</p>
+              <button
+                onClick={() => setAddClientForm({ ...addClientForm, cars: [...addClientForm.cars, { model: '', plate: '', bipNumber: '' }] })}
+                className="text-[9px] font-bold text-[#D4A853]/60 uppercase tracking-widest hover:text-[#D4A853] transition-colors"
+              >+ Ajouter</button>
+            </div>
+            {addClientForm.cars.length === 0 && (
+              <p className="text-[10px] text-white/15 italic">Aucun véhicule</p>
+            )}
+            <div className="space-y-2">
+              {addClientForm.cars.map((car, i) => (
+                <div key={i} className="space-y-1.5 p-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02]">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={car.model}
+                      onChange={e => setAddClientForm(f => ({ ...f, cars: f.cars.map((c, j) => j === i ? { ...c, model: e.target.value } : c) }))}
+                      placeholder="Modèle (ex: Renault Clio)"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15"
+                    />
+                    <button
+                      onClick={() => setAddClientForm({ ...addClientForm, cars: addClientForm.cars.filter((_, j) => j !== i) })}
+                      className="h-7 w-7 shrink-0 bg-white/5 text-red-400/50 rounded-lg flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-all border border-white/10"
+                    ><X size={10} /></button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={car.plate}
+                      onChange={e => setAddClientForm(f => ({ ...f, cars: f.cars.map((c, j) => j === i ? { ...c, plate: e.target.value.toUpperCase() } : c) }))}
+                      placeholder="AA-000-AA"
+                      className="w-28 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15 font-mono uppercase"
+                    />
+                    <input
+                      value={car.bipNumber}
+                      onChange={e => setAddClientForm(f => ({ ...f, cars: f.cars.map((c, j) => j === i ? { ...c, bipNumber: e.target.value } : c) }))}
+                      placeholder="N° Bip"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#D4A853]/40 placeholder:text-white/15 font-mono"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => { setShowAddClientModal(false); setAddClientForm({ nom: '', prenom: '', email: '', password: '', cars: [] }); }} className="flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 transition-all">
+              Annuler
+            </button>
+            <button onClick={handleAddClient} className="flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest gold-gradient text-[#0A0A0A] hover:shadow-lg hover:shadow-amber-900/20 transition-all">
+              Créer le client
             </button>
           </div>
         </div>
