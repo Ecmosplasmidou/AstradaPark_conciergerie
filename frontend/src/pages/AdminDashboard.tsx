@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download, MessageSquare, CheckCircle2, Send, Filter, Calendar as CalendarIcon, Trash2, Table2, UserCircle, Mail, CreditCard, ChevronDown, UserPlus } from 'lucide-react';
+import { Car, Search, Info, AlertTriangle, X, Shield, Users, ParkingCircle, Receipt, Download, MessageSquare, CheckCircle2, Send, Filter, Calendar as CalendarIcon, Trash2, Table2, UserCircle, Mail, CreditCard, ChevronDown, UserPlus, Sun, Moon } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '../services/api';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
@@ -38,6 +38,9 @@ const AdminDashboard = () => {
   // État édition client (modal) + expansion factures
   const [editingClientUser, setEditingClientUser] = useState<any | null>(null);
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+
+  // Light mode
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem('lightMode') === 'true');
 
   // État ajout client
   const [showAddClientModal, setShowAddClientModal] = useState(false);
@@ -444,7 +447,7 @@ const AdminDashboard = () => {
 
   return (
     <>
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8" style={{ background: 'linear-gradient(180deg, #0A0A0A 0%, #111118 50%, #0F0F0F 100%)' }}>
+    <div className={`min-h-screen p-4 sm:p-6 lg:p-8 transition-colors duration-300${lightMode ? ' light-mode' : ''}`} style={lightMode ? { background: '#F2F2F5' } : { background: 'linear-gradient(180deg, #0A0A0A 0%, #111118 50%, #0F0F0F 100%)' }}>
       <div className="max-w-[1800px] mx-auto">
 
         {/* MODALE DE LIBERATION */}
@@ -480,14 +483,23 @@ const AdminDashboard = () => {
 
         {/* HEADER */}
         <header className="mb-6 sm:mb-10 flex flex-col gap-4 sm:gap-6">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Shield size={14} className="text-[#D4A853]/60" />
-              <p className="text-[#D4A853]/60 font-semibold text-[10px] uppercase tracking-[0.3em]">Panneau d'Administration</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Shield size={14} className="text-[#D4A853]/60" />
+                <p className="text-[#D4A853]/60 font-semibold text-[10px] uppercase tracking-[0.3em]">Panneau d'Administration</p>
+              </div>
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+                Gestion des <span className="text-[#D4A853]">Emplacements</span>
+              </h1>
             </div>
-            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Gestion des <span className="text-[#D4A853]">Emplacements</span>
-            </h1>
+            <button
+              onClick={() => { const next = !lightMode; setLightMode(next); localStorage.setItem('lightMode', String(next)); }}
+              title={lightMode ? 'Mode sombre' : 'Mode clair'}
+              className="h-10 w-10 rounded-xl flex items-center justify-center border transition-all shrink-0 mt-1 bg-white/5 border-white/10 text-white/50 hover:text-[#D4A853] hover:border-[#D4A853]/30"
+            >
+              {lightMode ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
           </div>
 
           {/* SECTION STATISTIQUES */}
@@ -556,7 +568,7 @@ const AdminDashboard = () => {
           </button>
           <button
             onClick={() => setShowAddClientModal(true)}
-            className="ml-auto px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 bg-white/5 text-white/50 hover:text-white/80 border border-white/10 hover:border-[#D4A853]/30 hover:bg-[#D4A853]/10"
+            className="ml-auto px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 bg-white/5 text-white/50 hover:text-white/80 border border-white/10 hover:border-[#D4A853]/30 hover:bg-[#D4A853]/10 shrink-0"
           >
             <UserPlus size={13} />Ajouter un client
           </button>
