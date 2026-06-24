@@ -80,3 +80,10 @@
   }
 }
 
+/* LIGHT MODE — fond blanc, cartes sombres solidifiées */
+.light-mode [style*="rgba(255,255,255,0.02)"] { background: #1a1a1a !important; }
+.light-mode [style*="rgba(255,255,255,0.03)"] { background: #1f1f1f !important; }
+.light-mode [style*="rgba(255,255,255,0.01)"] { background: #141414 !important; }
+.light-mode [style*="rgba(16, 185, 129, 0.05)"] { background: rgba(16,185,129,0.12) !important; }
+.light-mode [style*="rgba(212, 168, 83, 0.05)"] { background: rgba(212,168,83,0.12) !important; }
+

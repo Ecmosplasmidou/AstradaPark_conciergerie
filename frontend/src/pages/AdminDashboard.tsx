@@ -447,7 +447,7 @@ const AdminDashboard = () => {
 
   return (
     <>
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8 transition-colors duration-500" style={{ background: lightMode ? '#FFFFFF' : 'linear-gradient(180deg, #0A0A0A 0%, #111118 50%, #0F0F0F 100%)' }}>
+    <div className={`min-h-screen p-4 sm:p-6 lg:p-8 transition-colors duration-500${lightMode ? ' light-mode' : ''}`} style={{ background: lightMode ? '#FFFFFF' : 'linear-gradient(180deg, #0A0A0A 0%, #111118 50%, #0F0F0F 100%)' }}>
       <div className="max-w-[1800px] mx-auto">
 
         {/* MODALE DE LIBERATION */}
