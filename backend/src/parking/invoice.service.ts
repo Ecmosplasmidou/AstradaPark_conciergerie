@@ -88,17 +88,22 @@ export class InvoiceService {
       return existing;
     }
 
-    // Prorata temporis pour la facturation du mois
+    // Calcul du prorata : on base toujours sur 30 jours (jamais > 30, jamais < 30 pour un mois plein)
     const [sy, sm, sd] = startDate.split('-').map(Number);
     const [ey, em, ed] = periodEnd.split('-').map(Number);
     const startLocal = new Date(sy, sm - 1, sd);
     const endLocal = new Date(ey, em - 1, ed);
-    const daysInPeriod = Math.round((endLocal.getTime() - startLocal.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const actualDays = Math.round((endLocal.getTime() - startLocal.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const mensuelAmount = slot.mensuelAmount ?? 240;
-    const dailyRate = parseFloat((mensuelAmount / 30).toFixed(4));
-    const mensuelHT = parseFloat((daysInPeriod * dailyRate).toFixed(2));
 
-    // Premier mois : adhésion + mensuel (prorata) + caution
+    // Si le mois est complet (démarre le 1er du mois), toujours facturer 30j = mensuelAmount exact
+    // Sinon prorata plafonné à 30j max (les mois de 31j ne dépassent pas le tarif mensuel)
+    const startsOnFirst = sd === 1;
+    const effectiveDays = startsOnFirst ? 30 : Math.min(actualDays, 30);
+    const dailyRate = parseFloat((mensuelAmount / 30).toFixed(4));
+    const mensuelHT = parseFloat((effectiveDays * dailyRate).toFixed(2));
+
+    // Premier mois : adhésion + mensuel + caution
     const adhesionAmount = slot.adhesionAmount ?? 200;
     const cautionAmount = slot.cautionAmount ?? 240;
     const FIRST_MONTH_AMOUNT = parseFloat((adhesionAmount + mensuelHT + cautionAmount).toFixed(2));
@@ -122,7 +127,7 @@ export class InvoiceService {
     });
 
     const saved = await invoice.save();
-    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${FIRST_MONTH_AMOUNT}€ HT (adhésion ${adhesionAmount} + mensuel ${daysInPeriod}j×${dailyRate.toFixed(2)}€ + caution ${cautionAmount})`);
+    this.logger.log(`Facture initiale ${invoiceNumber} créée pour ${slot.email} — du ${startDate} au ${periodEnd} — ${FIRST_MONTH_AMOUNT}€ HT (adhésion ${adhesionAmount} + mensuel ${effectiveDays}j×${dailyRate.toFixed(2)}€ + caution ${cautionAmount})`);
     return saved;
   }
 
