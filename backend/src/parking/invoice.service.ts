@@ -249,6 +249,27 @@ export class InvoiceService {
   }
 
   /**
+   * Corrige les montants de toutes les factures existantes :
+   * - Non premier mois → amount = mensuelAmount
+   * - Premier mois → amount = adhesionAmount + mensuelAmount + cautionAmount
+   */
+  async fixAllAmounts(): Promise<number> {
+    const all = await this.invoiceModel.find().exec();
+    let fixed = 0;
+    for (const inv of all) {
+      const mensuel = inv.mensuelAmount ?? 240;
+      const correctAmount = inv.isFirstMonth
+        ? parseFloat(((inv.adhesionAmount ?? 200) + mensuel + (inv.cautionAmount ?? 240)).toFixed(2))
+        : mensuel;
+      if (Math.abs(inv.amount - correctAmount) > 0.01) {
+        await this.invoiceModel.findByIdAndUpdate(inv._id, { $set: { amount: correctAmount } }).exec();
+        fixed++;
+      }
+    }
+    return fixed;
+  }
+
+  /**
    * Supprime toutes les factures d'un client pour une place donnée
    */
   async deleteInvoicesByClient(slotNumber: number, clientEmail: string): Promise<number> {

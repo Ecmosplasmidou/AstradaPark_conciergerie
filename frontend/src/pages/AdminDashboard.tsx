@@ -981,6 +981,19 @@ const AdminDashboard = () => {
               >
                 <CalendarIcon size={13} />+ Créer une facture
               </button>
+              <button
+                onClick={async () => {
+                  if (!window.confirm('Corriger automatiquement tous les montants incorrects (206€ → 200€) ?')) return;
+                  try {
+                    const res = await api.post('/invoices/fix-amounts');
+                    fetchInvoices();
+                    alert(res.data.message);
+                  } catch { alert('Erreur lors de la correction'); }
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500/20 transition-all whitespace-nowrap shrink-0"
+              >
+                ⚡ Corriger les montants
+              </button>
             </div>
 
             {/* NAVIGATION PAR MOIS */}

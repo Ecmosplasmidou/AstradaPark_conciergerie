@@ -29,6 +29,15 @@ export class InvoiceController {
     return this.invoiceService.createManualInvoice(body);
   }
 
+  /** POST /invoices/fix-amounts — corrige tous les montants incorrects (admin) */
+  @Post('fix-amounts')
+  @UseGuards(AuthGuard('jwt'))
+  async fixAmounts(@Req() req: any) {
+    if (req.user.role !== 'admin') throw new ForbiddenException();
+    const count = await this.invoiceService.fixAllAmounts();
+    return { fixed: count, message: `${count} facture(s) corrigée(s)` };
+  }
+
   /** PATCH /invoices/update-client-name — corrige nom/prénom sur toutes les factures d'un client */
   @Patch('update-client-name')
   @UseGuards(AuthGuard('jwt'))
