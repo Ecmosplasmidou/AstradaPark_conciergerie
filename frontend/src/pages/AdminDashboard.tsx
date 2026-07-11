@@ -39,6 +39,18 @@ const AdminDashboard = () => {
   const [editingClientUser, setEditingClientUser] = useState<any | null>(null);
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
 
+  // Création manuelle de facture
+  const [showCreateInvModal, setShowCreateInvModal] = useState(false);
+  const [createInvSlot, setCreateInvSlot] = useState<number>(0);
+  const [createInvMonth, setCreateInvMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [createInvMensuel, setCreateInvMensuel] = useState(240);
+  const [createInvIsFirst, setCreateInvIsFirst] = useState(false);
+  const [createInvAdhesion, setCreateInvAdhesion] = useState(200);
+  const [createInvCaution, setCreateInvCaution] = useState(240);
+
   // Light mode
   const [lightMode, setLightMode] = useState(() => localStorage.getItem('lightMode') === 'true');
 
@@ -185,7 +197,49 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleSecondMonthPDF = (inv: any) => {
+
+  const handleCreateInvoice = async () => {
+    if (!createInvSlot || !createInvMonth) {
+      alert('Veuillez sélectionner une place et un mois');
+      return;
+    }
+    const slot = slots.find(s => s.number === createInvSlot);
+    if (!slot || slot.status !== 'occupé') {
+      alert('Place invalide ou non occupée');
+      return;
+    }
+    const [y, m] = createInvMonth.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const periodStart = `${y}-${pad(m)}-01`;
+    const periodEnd = `${y}-${pad(m)}-${pad(lastDay)}`;
+    const amount = createInvIsFirst
+      ? parseFloat((createInvAdhesion + createInvMensuel + createInvCaution).toFixed(2))
+      : createInvMensuel;
+    try {
+      await api.post('/invoices', {
+        slotNumber: slot.number,
+        clientNom: slot.nom,
+        clientPrenom: slot.prenom,
+        clientEmail: slot.email,
+        carModel: slot.carModel ?? '',
+        periodStart,
+        periodEnd,
+        amount,
+        isFirstMonth: createInvIsFirst,
+        mensuelAmount: createInvMensuel,
+        adhesionAmount: createInvIsFirst ? createInvAdhesion : 0,
+        cautionAmount: createInvIsFirst ? createInvCaution : 0,
+      });
+      setShowCreateInvModal(false);
+      fetchInvoices();
+      setInvoiceFilterMonth(createInvMonth);
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? 'Erreur lors de la création de la facture');
+    }
+  };
+
+  const handleCreateNextMonthInvoice = async (inv: any) => {
     const ref = new Date(inv.periodStart);
     const y = ref.getFullYear();
     const m = ref.getMonth(); // 0-indexed
@@ -195,17 +249,27 @@ const AdminDashboard = () => {
     const pad = (n: number) => String(n).padStart(2, '0');
     const periodStart = `${nextYear}-${pad(nextMonth + 1)}-01`;
     const periodEnd = `${nextYear}-${pad(nextMonth + 1)}-${pad(lastDay)}`;
-    const invUser = users.find((u: any) => u.email === inv.clientEmail);
-    generateInvoicePDF({
-      ...inv,
-      invoiceNumber: `${inv.invoiceNumber}-M2`,
-      amount: inv.mensuelAmount ?? 240,
-      periodStart,
-      periodEnd,
-      isFirstMonth: false,
-      mandat: invUser?.mandat,
-      immeuble: invUser?.immeuble,
-    });
+    const mensuel = inv.mensuelAmount ?? 240;
+    try {
+      await api.post('/invoices', {
+        slotNumber: inv.slotNumber,
+        clientNom: inv.clientNom,
+        clientPrenom: inv.clientPrenom,
+        clientEmail: inv.clientEmail,
+        carModel: inv.carModel ?? '',
+        periodStart,
+        periodEnd,
+        amount: mensuel,
+        isFirstMonth: false,
+        mensuelAmount: mensuel,
+        adhesionAmount: 0,
+        cautionAmount: 0,
+      });
+      fetchInvoices();
+      setInvoiceFilterMonth(`${nextYear}-${pad(nextMonth + 1)}`);
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? 'Erreur lors de la création de la facture');
+    }
   };
 
   const handleDeleteInvoice = async (id: string, invoiceNumber: string) => {
@@ -897,57 +961,96 @@ const AdminDashboard = () => {
         /* SECTION FACTURES */
         <div className="rounded-[2rem] border border-white/5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
           <div className="p-6 border-b border-white/5 bg-white/[0.01]">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+            {/* Titre + bouton créer */}
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-5">
               <div>
                 <h2 className="text-xl font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Toutes les <span className="text-[#D4A853]">Factures</span></h2>
-                <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">Recherche et filtrage multicritères</p>
+                <p className="text-[10px] text-white/30 font-semibold uppercase tracking-widest mt-1">{invoices.length} facture(s) au total</p>
               </div>
+              <button
+                onClick={() => {
+                  setCreateInvSlot(0);
+                  setCreateInvMonth(invoiceFilterMonth !== 'all' ? invoiceFilterMonth : (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`; })());
+                  setCreateInvMensuel(240);
+                  setCreateInvIsFirst(false);
+                  setCreateInvAdhesion(200);
+                  setCreateInvCaution(240);
+                  setShowCreateInvModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#D4A853]/10 border border-[#D4A853]/30 text-[#D4A853] text-[10px] font-bold uppercase tracking-widest hover:bg-[#D4A853]/20 hover:border-[#D4A853]/60 transition-all whitespace-nowrap shrink-0"
+              >
+                <CalendarIcon size={13} />+ Créer une facture
+              </button>
             </div>
 
-            {/* FILTRES FACTURES */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Filtre Nom */}
+            {/* NAVIGATION PAR MOIS */}
+            {(() => {
+              const currentLabel = invoiceFilterMonth !== 'all' ? (() => {
+                const [y, m] = invoiceFilterMonth.split('-').map(Number);
+                const lbl = new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                return lbl.charAt(0).toUpperCase() + lbl.slice(1);
+              })() : 'Tous les mois';
+
+              const countForMonth = invoiceFilterMonth === 'all' ? invoices.length
+                : invoices.filter(inv => inv.periodStart.slice(0, 7) === invoiceFilterMonth).length;
+
+              const navigateMonth = (dir: 1 | -1) => {
+                const base = invoiceFilterMonth !== 'all' ? invoiceFilterMonth : (() => {
+                  const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                })();
+                const [y, m] = base.split('-').map(Number);
+                const next = new Date(y, m - 1 + dir, 1);
+                setInvoiceFilterMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+              };
+
+              return (
+                <div className="flex items-center gap-2 mb-5 flex-wrap">
+                  <button
+                    onClick={() => navigateMonth(-1)}
+                    className="h-9 w-9 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 text-white/50 hover:text-white/90 hover:border-[#D4A853]/40 transition-all font-bold text-sm"
+                  >‹</button>
+                  <div className="flex-1 min-w-[180px] h-9 flex items-center justify-center gap-2 px-4 rounded-xl border font-bold text-xs uppercase tracking-widest transition-all"
+                    style={{ background: 'rgba(212,168,83,0.05)', borderColor: 'rgba(212,168,83,0.2)' }}>
+                    <CalendarIcon size={12} className="text-[#D4A853]/60" />
+                    <span className="text-[#D4A853]">{currentLabel}</span>
+                    <span className="text-[#D4A853]/40">·</span>
+                    <span className="text-white/40">{countForMonth} facture{countForMonth > 1 ? 's' : ''}</span>
+                  </div>
+                  <button
+                    onClick={() => navigateMonth(1)}
+                    className="h-9 w-9 rounded-xl flex items-center justify-center bg-white/5 border border-white/10 text-white/50 hover:text-white/90 hover:border-[#D4A853]/40 transition-all font-bold text-sm"
+                  >›</button>
+                  {invoiceFilterMonth !== 'all' && (
+                    <button
+                      onClick={() => setInvoiceFilterMonth('all')}
+                      className="h-9 px-4 rounded-xl bg-white/5 border border-white/10 text-white/40 text-[10px] font-bold uppercase tracking-widest hover:text-white/70 hover:border-white/20 transition-all whitespace-nowrap"
+                    >Tous les mois</button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* FILTRES NOM + VOITURE */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
-                <input 
-                  type="text" 
-                  placeholder="Rechercher par nom..." 
+                <input
+                  type="text"
+                  placeholder="Rechercher par nom..."
                   value={invoiceFilterName}
                   onChange={(e) => setInvoiceFilterName(e.target.value)}
                   className="w-full bg-black/40 border border-white/10 rounded-xl p-3 pl-10 text-xs text-white placeholder:text-white/20 focus:ring-2 focus:ring-[#D4A853]/30 outline-none transition-all"
                 />
               </div>
-
-              {/* Filtre Voiture */}
               <div className="relative">
                 <Car className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
-                <input 
-                  type="text" 
-                  placeholder="Modèle ou plaque..." 
+                <input
+                  type="text"
+                  placeholder="Modèle ou plaque..."
                   value={invoiceFilterCar}
                   onChange={(e) => setInvoiceFilterCar(e.target.value)}
                   className="w-full bg-black/40 border border-white/10 rounded-xl p-3 pl-10 text-xs text-white placeholder:text-white/20 focus:ring-2 focus:ring-[#D4A853]/30 outline-none transition-all"
                 />
-              </div>
-
-              {/* Filtre Période */}
-              <div className="relative flex">
-                <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4A853]/40" size={14} />
-                <select 
-                  value={invoiceFilterMonth}
-                  onChange={(e) => setInvoiceFilterMonth(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 pl-10 pr-8 text-xs text-white outline-none focus:ring-2 focus:ring-[#D4A853]/30 transition-all appearance-none"
-                >
-                  <option value="all">Toutes les périodes</option>
-                  {Array.from(new Set(invoices.map(inv => {
-                    const d = new Date(inv.periodStart);
-                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                  }))).sort((a, b) => b.localeCompare(a)).map(m => {
-                    const [year, month] = m.split('-');
-                    const monthName = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-                    return <option key={m} value={m}>{monthName.charAt(0).toUpperCase() + monthName.slice(1)}</option>;
-                  })}
-                </select>
               </div>
             </div>
           </div>
@@ -1007,16 +1110,29 @@ const AdminDashboard = () => {
                       >
                         CSV
                       </button>
-                      {inv.isFirstMonth && (
-                        <button
-                          onClick={() => handleSecondMonthPDF(inv)}
-                          title="Générer la facture du 2ème mois (240 € HT)"
-                          className="h-9 px-2.5 bg-white/5 text-blue-400 rounded-lg flex items-center justify-center gap-1.5 hover:bg-blue-500/20 hover:text-blue-300 transition-all border border-white/10 hover:border-blue-500/40 cursor-pointer text-[9px] font-bold uppercase tracking-tight whitespace-nowrap"
-                        >
-                          <CalendarIcon size={12} />
-                          Mois 2
-                        </button>
-                      )}
+                      {(() => {
+                        const ref = new Date(inv.periodStart);
+                        const ny = ref.getMonth() === 11 ? ref.getFullYear() + 1 : ref.getFullYear();
+                        const nm = (ref.getMonth() + 1) % 12;
+                        const pad = (n: number) => String(n).padStart(2, '0');
+                        const nextStart = `${ny}-${pad(nm + 1)}-01`;
+                        const alreadyExists = invoices.some(i => i.slotNumber === inv.slotNumber && i.clientEmail === inv.clientEmail && i.periodStart === nextStart);
+                        return (
+                          <button
+                            onClick={() => !alreadyExists && handleCreateNextMonthInvoice(inv)}
+                            disabled={alreadyExists}
+                            title={alreadyExists ? 'Facture du mois suivant déjà créée' : 'Créer la facture du mois suivant'}
+                            className={`h-9 px-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all border text-[9px] font-bold uppercase tracking-tight whitespace-nowrap ${
+                              alreadyExists
+                                ? 'bg-white/5 text-white/20 border-white/5 cursor-not-allowed'
+                                : 'bg-white/5 text-emerald-400 border-white/10 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500/40 cursor-pointer'
+                            }`}
+                          >
+                            <CalendarIcon size={12} />
+                            {alreadyExists ? '✓' : 'Mois +'}
+                          </button>
+                        );
+                      })()}
                       <button
                         onClick={() => handleDeleteInvoice(inv._id, inv.invoiceNumber)}
                         title="Supprimer la facture"
@@ -1736,6 +1852,119 @@ const AdminDashboard = () => {
         )}
       </div>
     </div>
+
+    {/* MODAL CRÉER FACTURE */}
+    {showCreateInvModal && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setShowCreateInvModal(false); }}>
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+        <div className="relative w-full max-w-md rounded-[2rem] border border-white/10 p-6 space-y-5" style={{ background: 'linear-gradient(160deg, #1A1A1A, #111)' }}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-black text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Créer une <span className="text-[#D4A853]">Facture</span>
+            </h3>
+            <button onClick={() => setShowCreateInvModal(false)} className="h-8 w-8 bg-white/5 rounded-xl flex items-center justify-center text-white/40 hover:text-white/80 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Sélection de la place */}
+          <div>
+            <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Place (occupée)</p>
+            <select
+              value={createInvSlot}
+              onChange={e => {
+                const num = parseInt(e.target.value);
+                setCreateInvSlot(num);
+                const s = slots.find(sl => sl.number === num);
+                if (s?.mensuelAmount) setCreateInvMensuel(s.mensuelAmount);
+              }}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40 appearance-none"
+            >
+              <option value={0}>— Choisir une place —</option>
+              {slots.filter(s => s.status === 'occupé').map(s => (
+                <option key={s.number} value={s.number}>
+                  Place #{s.number} — {s.prenom} {s.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Mois */}
+          <div>
+            <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Mois de facturation</p>
+            <input
+              type="month"
+              value={createInvMonth}
+              onChange={e => setCreateInvMonth(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#D4A853]/40"
+            />
+          </div>
+
+          {/* Montant mensuel */}
+          <div>
+            <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Mensuel HT (€)</p>
+            <div className="relative">
+              <input
+                type="number" min="0" step="10"
+                value={createInvMensuel}
+                onChange={e => setCreateInvMensuel(parseFloat(e.target.value) || 0)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 pr-8 text-xs text-white outline-none focus:border-[#D4A853]/40 text-right"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs pointer-events-none">€</span>
+            </div>
+          </div>
+
+          {/* Premier mois */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setCreateInvIsFirst(v => !v)}
+              className={`h-5 w-9 rounded-full transition-all border shrink-0 relative ${createInvIsFirst ? 'bg-[#D4A853] border-[#D4A853]' : 'bg-white/10 border-white/20'}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${createInvIsFirst ? 'left-4' : 'left-0.5'}`} />
+            </button>
+            <p className="text-xs text-white/60 font-semibold">Premier mois <span className="text-white/30 font-normal">(adhésion + caution)</span></p>
+          </div>
+
+          {createInvIsFirst && (
+            <div className="grid grid-cols-2 gap-3 pl-3 border-l-2 border-[#D4A853]/20">
+              <div>
+                <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Adhésion HT (€)</p>
+                <div className="relative">
+                  <input type="number" min="0" step="50" value={createInvAdhesion} onChange={e => setCreateInvAdhesion(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 pr-7 text-xs text-white outline-none focus:border-[#D4A853]/40 text-right" />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 text-xs pointer-events-none">€</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[9px] font-bold text-[#D4A853]/50 uppercase tracking-widest mb-1.5">Caution HT (€)</p>
+                <div className="relative">
+                  <input type="number" min="0" step="50" value={createInvCaution} onChange={e => setCreateInvCaution(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 pr-7 text-xs text-white outline-none focus:border-[#D4A853]/40 text-right" />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 text-xs pointer-events-none">€</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Résumé du montant */}
+          <div className="px-4 py-3 rounded-xl border border-[#D4A853]/15 flex items-center justify-between" style={{ background: 'rgba(212,168,83,0.04)' }}>
+            <span className="text-[10px] text-white/40 font-semibold uppercase tracking-widest">Total HT</span>
+            <span className="text-[#D4A853] font-black text-base">
+              {(createInvIsFirst ? createInvAdhesion + createInvMensuel + createInvCaution : createInvMensuel).toFixed(2)} €
+            </span>
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setShowCreateInvModal(false)} className="flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 transition-all">
+              Annuler
+            </button>
+            <button onClick={handleCreateInvoice} className="flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest gold-gradient text-[#0A0A0A] hover:shadow-lg hover:shadow-amber-900/20 transition-all">
+              Créer la facture
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* MODAL MODIFIER CLIENT */}
     {editingClientUser && (

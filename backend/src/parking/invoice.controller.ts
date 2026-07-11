@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Patch, Param, Body, UseGuards, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Delete, Get, Patch, Post, Param, Body, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -19,6 +19,14 @@ export class InvoiceController {
   @UseGuards(AuthGuard('jwt'))
   async getMyInvoices(@Req() req: any) {
     return this.invoiceService.getInvoicesByEmail(req.user.email);
+  }
+
+  /** POST /invoices — crée manuellement une facture mensuelle */
+  @Post()
+  @UseGuards(AuthGuard('jwt'))
+  async createInvoice(@Body() body: any, @Req() req: any) {
+    if (req.user.role !== 'admin') throw new ForbiddenException();
+    return this.invoiceService.createManualInvoice(body);
   }
 
   /** PATCH /invoices/update-client-name — corrige nom/prénom sur toutes les factures d'un client */

@@ -257,4 +257,45 @@ export class InvoiceService {
   async deleteInvoice(id: string): Promise<void> {
     await this.invoiceModel.findByIdAndDelete(id).exec();
   }
+
+  /**
+   * Crée manuellement une facture mensuelle (admin uniquement)
+   */
+  async createManualInvoice(data: {
+    slotNumber: number;
+    clientNom: string;
+    clientPrenom: string;
+    clientEmail: string;
+    carModel?: string;
+    periodStart: string;
+    periodEnd: string;
+    amount: number;
+    isFirstMonth?: boolean;
+    mensuelAmount?: number;
+    adhesionAmount?: number;
+    cautionAmount?: number;
+  }): Promise<Invoice> {
+    const existing = await this.invoiceModel.findOne({
+      slotNumber: data.slotNumber,
+      clientEmail: data.clientEmail,
+      periodStart: data.periodStart,
+    }).exec();
+
+    if (existing) {
+      throw new Error(`Une facture existe déjà pour la place #${data.slotNumber} sur cette période`);
+    }
+
+    const invoiceNumber = await this.generateInvoiceNumber();
+    const invoice = new this.invoiceModel({
+      invoiceNumber,
+      ...data,
+      type: 'mensuel',
+      isFirstMonth: data.isFirstMonth ?? false,
+      mensuelAmount: data.mensuelAmount ?? 240,
+      adhesionAmount: data.adhesionAmount ?? 0,
+      cautionAmount: data.cautionAmount ?? 0,
+    });
+
+    return invoice.save();
+  }
 }
