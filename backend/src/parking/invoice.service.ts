@@ -16,9 +16,11 @@ export class InvoiceService implements OnModuleInit {
 
   /** Au démarrage : corrige automatiquement tous les montants incorrects en base */
   async onModuleInit() {
-    const fixed = await this.fixAllAmounts();
-    if (fixed > 0) {
-      this.logger.log(`[AutoFix] ${fixed} facture(s) corrigée(s) à 30j au démarrage`);
+    try {
+      const fixed = await this.fixAllAmounts();
+      this.logger.log(`[AutoFix] ${fixed} facture(s) corrigée(s) au démarrage`);
+    } catch (err) {
+      this.logger.error(`[AutoFix] Erreur: ${err}`);
     }
   }
 

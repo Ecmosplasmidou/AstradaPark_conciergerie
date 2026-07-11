@@ -371,9 +371,9 @@ const AdminDashboard = () => {
 
   const handleExportRecapExcel = () => {
     const OWNER_SLOT = 30;
-    const mensuelNet = (inv: any) => inv.isFirstMonth
-      ? parseFloat((inv.amount - (inv.adhesionAmount ?? 200)).toFixed(2))
-      : (inv.amount as number);
+    const mensuelNet = (inv: any) => inv.mensuelAmount ?? (inv.isFirstMonth
+      ? parseFloat((inv.amount - (inv.adhesionAmount ?? 0) - (inv.cautionAmount ?? 0)).toFixed(2))
+      : inv.amount as number);
 
     const monthKeys = Array.from(new Set(invoices.map(inv => inv.periodStart.slice(0, 7)))).sort() as string[];
     const monthLabel = (key: string) => {
@@ -1196,9 +1196,10 @@ const AdminDashboard = () => {
             invBySlot[inv.slotNumber].push(inv);
           });
 
-          // Montant mensuel d'une facture (hors adhésion)
+          // Montant mensuel d'une facture (toujours = mensuelAmount, jamais de prorata)
           const mensuelNet = (inv: any) => {
-            if (inv.isFirstMonth) return parseFloat((inv.amount - (inv.adhesionAmount ?? 200)).toFixed(2));
+            if (inv.mensuelAmount != null) return inv.mensuelAmount as number;
+            if (inv.isFirstMonth) return parseFloat((inv.amount - (inv.adhesionAmount ?? 0) - (inv.cautionAmount ?? 0)).toFixed(2));
             return inv.amount as number;
           };
 
