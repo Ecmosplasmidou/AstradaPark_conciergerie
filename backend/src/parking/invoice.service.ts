@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -6,13 +6,21 @@ import { ParkingSlot } from './schemas/parking.schema';
 import { Invoice } from './schemas/invoice.schema';
 
 @Injectable()
-export class InvoiceService {
+export class InvoiceService implements OnModuleInit {
   private readonly logger = new Logger(InvoiceService.name);
 
   constructor(
     @InjectModel(ParkingSlot.name) private parkingModel: Model<ParkingSlot>,
     @InjectModel(Invoice.name) private invoiceModel: Model<Invoice>,
   ) {}
+
+  /** Au démarrage : corrige automatiquement tous les montants incorrects en base */
+  async onModuleInit() {
+    const fixed = await this.fixAllAmounts();
+    if (fixed > 0) {
+      this.logger.log(`[AutoFix] ${fixed} facture(s) corrigée(s) à 30j au démarrage`);
+    }
+  }
 
   /**
    * Génère un numéro de facture unique : FAC-AAAA-MM-NNN
